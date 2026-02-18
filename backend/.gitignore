@@ -13,4 +13,4 @@ coverage
 .vscode
 
 # YouTube player auto-generated files
-backend/*-player-script.js
+*-player-script.js
