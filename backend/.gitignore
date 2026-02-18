@@ -1,0 +1,16 @@
+# Backend
+node_modules
+dist
+downloads
+*.log
+.env
+
+# Testing
+coverage
+
+# IDEs
+.idea
+.vscode
+
+# YouTube player auto-generated files
+backend/*-player-script.js

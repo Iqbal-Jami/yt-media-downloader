@@ -1,0 +1,111 @@
+<div class="container">
+  <!-- Header -->
+  <div class="header">
+    <h1>🎥 YouTube Downloader</h1>
+    <p>Download videos in any resolution or extract MP3 audio</p>
+  </div>
+
+  <!-- Input Section -->
+  <div class="input-section">
+    <input 
+      type="text" 
+      [(ngModel)]="videoUrl"
+      (keyup.enter)="fetchVideoInfo()"
+      placeholder="Paste YouTube video URL here..."
+      class="url-input"
+    >
+    <button 
+      (click)="fetchVideoInfo()" 
+      [disabled]="isLoading"
+      class="btn-primary"
+    >
+      {{ isLoading ? 'Loading...' : 'Get Download Options' }}
+    </button>
+  </div>
+
+  <!-- Loading Spinner -->
+  <div *ngIf="isLoading" class="loading-spinner">
+    <div class="spinner"></div>
+    <p>Fetching video information...</p>
+  </div>
+
+  <!-- Error Message -->
+  <div *ngIf="errorMessage" class="error-message">
+    {{ errorMessage }}
+  </div>
+
+  <!-- Video Info Section -->
+  <div *ngIf="videoInfo && !isLoading" class="video-info">
+    <!-- Video Preview -->
+    <div class="video-preview">
+      <img [src]="videoInfo.thumbnail" [alt]="videoInfo.title" class="thumbnail">
+      <div class="video-details">
+        <h3>{{ videoInfo.title }}</h3>
+        <p>Duration: {{ getFormattedDuration() }}</p>
+        <p>Channel: {{ videoInfo.author }}</p>
+      </div>
+    </div>
+
+    <!-- Download Options -->
+    <div class="download-options">
+      <h3>📥 Download Options</h3>
+      
+      <!-- Format Tabs -->
+      <div class="format-tabs">
+        <button 
+          [class.active]="activeTab === 'video'"
+          (click)="setActiveTab('video')"
+          class="tab-btn"
+        >
+          Video (MP4)
+        </button>
+        <button 
+          [class.active]="activeTab === 'audio'"
+          (click)="setActiveTab('audio')"
+          class="tab-btn"
+        >
+          Audio (MP3)
+        </button>
+      </div>
+
+      <!-- Video Formats -->
+      <div *ngIf="activeTab === 'video'" class="format-list">
+        <div *ngFor="let format of videoFormats" class="format-item">
+          <div class="format-info">
+            <div class="format-quality">{{ format.label }}</div>
+            <div class="format-details">{{ format.quality }} • {{ format.format.toUpperCase() }} • Est. {{ format.size }}</div>
+          </div>
+          <button 
+            (click)="downloadVideo(format)"
+            [disabled]="isDownloading(format)"
+            class="download-btn"
+          >
+            {{ isDownloading(format) ? '⏳ Processing...' : '⬇️ Download ' + format.ext.toUpperCase() }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Audio Formats -->
+      <div *ngIf="activeTab === 'audio'" class="format-list">
+        <div *ngFor="let format of audioFormats" class="format-item">
+          <div class="format-info">
+            <div class="format-quality">{{ format.label }}</div>
+            <div class="format-details">{{ format.quality }} • {{ format.format.toUpperCase() }} • Est. {{ format.size }}</div>
+          </div>
+          <button 
+            (click)="downloadVideo(format)"
+            [disabled]="isDownloading(format)"
+            class="download-btn"
+          >
+            {{ isDownloading(format) ? '⏳ Processing...' : '⬇️ Download ' + format.ext.toUpperCase() }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>⚠️ Note: Download videos you have rights to use. Respect copyright laws.</p>
+  </div>
+</div>
