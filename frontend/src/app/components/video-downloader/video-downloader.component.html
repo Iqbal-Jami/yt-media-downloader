@@ -1,111 +1,223 @@
-<div class="container">
-  <!-- Header -->
-  <div class="header">
-    <h1>🎥 YouTube Downloader</h1>
-    <p>Download videos in any resolution or extract MP3 audio</p>
+<!-- Cyber Grid Background -->
+<div class="cyber-grid"></div>
+
+<!-- Floating Particles -->
+<div class="particles-container" id="particles-js"></div>
+
+<!-- Main Container -->
+<div class="cyber-container">
+  
+  <!-- Transformer Header -->
+  <div class="transformer-header">
+    <div class="header-glow"></div>
+    <div class="scan-line"></div>
+    
+    <div class="logo-container">
+      <div class="hexagon-wrapper">
+        <div class="hexagon">
+          <div class="hexagon-inner">
+            <svg viewBox="0 0 100 100" class="transformer-icon">
+              <polygon points="50,5 95,27.5 95,72.5 50,95 5,72.5 5,27.5" class="hex-shape"/>
+              <circle cx="50" cy="50" r="20" class="core-circle"/>
+              <line x1="50" y1="30" x2="50" y2="15" class="antenna"/>
+              <line x1="35" y1="40" x2="20" y2="30" class="antenna"/>
+              <line x1="65" y1="40" x2="80" y2="30" class="antenna"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+      
+      <h1 class="cyber-title">
+        <span class="glitch-text" data-text="CYBER TUBE">CYBER TUBE</span>
+      </h1>
+      <p class="cyber-subtitle">TRANSFORMER EDITION • MEDIA EXTRACTION PROTOCOL</p>
+    </div>
   </div>
 
-  <!-- Input Section -->
-  <div class="input-section">
-    <input 
-      type="text" 
-      [(ngModel)]="videoUrl"
-      (keyup.enter)="fetchVideoInfo()"
-      placeholder="Paste YouTube video URL here..."
-      class="url-input"
-    >
+  <!-- Command Input Panel -->
+  <div class="command-panel">
+    <div class="panel-border"></div>
+    <div class="panel-header">
+      <span class="status-indicator"></span>
+      <span class="panel-title">[ INITIALIZATION SEQUENCE ]</span>
+    </div>
+    
+    <div class="input-wrapper">
+      <div class="input-decoration left"></div>
+      <input 
+        type="text" 
+        [(ngModel)]="videoUrl"
+        (keyup.enter)="fetchVideoInfo()"
+        placeholder="▶ ENTER TARGET URL COORDINATES..."
+        class="cyber-input"
+      >
+      <div class="input-decoration right"></div>
+    </div>
+    
     <button 
       (click)="fetchVideoInfo()" 
       [disabled]="isLoading"
-      class="btn-primary"
+      class="cyber-button"
+      [class.pulse]="!isLoading"
     >
-      {{ isLoading ? 'Loading...' : 'Get Download Options' }}
+      <span class="button-corners"></span>
+      <span class="button-text">
+        {{ isLoading ? '⟳ SCANNING MATRIX...' : '⚡ INITIATE PROTOCOL' }}
+      </span>
+      <span class="button-glow"></span>
     </button>
   </div>
 
-  <!-- Loading Spinner -->
-  <div *ngIf="isLoading" class="loading-spinner">
-    <div class="spinner"></div>
-    <p>Fetching video information...</p>
+  <!-- Holographic Loading -->
+  <div *ngIf="isLoading" class="hologram-loader">
+    <div class="loader-ring"></div>
+    <div class="loader-ring-2"></div>
+    <div class="loader-core"></div>
+    <div class="loader-text">
+      <span class="scanning-text">SCANNING</span>
+      <span class="loading-dots">...</span>
+    </div>
+    <div class="progress-bars">
+      <div class="progress-bar"></div>
+      <div class="progress-bar"></div>
+      <div class="progress-bar"></div>
+    </div>
   </div>
 
-  <!-- Error Message -->
-  <div *ngIf="errorMessage" class="error-message">
-    {{ errorMessage }}
+  <!-- Error Alert -->
+  <div *ngIf="errorMessage" class="cyber-alert">
+    <div class="alert-icon">⚠</div>
+    <div class="alert-content">
+      <div class="alert-title">SYSTEM ERROR</div>
+      <div class="alert-message">{{ errorMessage }}</div>
+    </div>
+    <div class="alert-close" (click)="errorMessage = ''">✕</div>
   </div>
 
-  <!-- Video Info Section -->
-  <div *ngIf="videoInfo && !isLoading" class="video-info">
-    <!-- Video Preview -->
-    <div class="video-preview">
-      <img [src]="videoInfo.thumbnail" [alt]="videoInfo.title" class="thumbnail">
-      <div class="video-details">
-        <h3>{{ videoInfo.title }}</h3>
-        <p>Duration: {{ getFormattedDuration() }}</p>
-        <p>Channel: {{ videoInfo.author }}</p>
+  <!-- Data Panel -->
+  <div *ngIf="videoInfo && !isLoading" class="data-panel">
+    
+    <!-- Holographic Preview -->
+    <div class="holo-preview">
+      <div class="preview-frame">
+        <div class="frame-corners"></div>
+        <div class="preview-glow"></div>
+        <img [src]="videoInfo.thumbnail" [alt]="videoInfo.title" class="holo-thumbnail">
+        <div class="scan-overlay"></div>
+      </div>
+      
+      <div class="data-readout">
+        <h3 class="data-title">{{ videoInfo.title }}</h3>
+        <div class="data-stats">
+          <div class="stat-item">
+            <span class="stat-icon">⏱</span>
+            <span class="stat-value">{{ getFormattedDuration() }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-icon">👤</span>
+            <span class="stat-value">{{ videoInfo.author }}</span>
+          </div>
+        </div>
       </div>
     </div>
 
-    <!-- Download Options -->
-    <div class="download-options">
-      <h3>📥 Download Options</h3>
+    <!-- Download Terminal -->
+    <div class="download-terminal">
+      <div class="terminal-header">
+        <div class="terminal-buttons">
+          <span class="term-btn red"></span>
+          <span class="term-btn yellow"></span>
+          <span class="term-btn green"></span>
+        </div>
+        <span class="terminal-title">[ EXTRACTION PROTOCOLS ]</span>
+      </div>
       
-      <!-- Format Tabs -->
-      <div class="format-tabs">
+      <!-- Mode Selector -->
+      <div class="mode-selector">
         <button 
           [class.active]="activeTab === 'video'"
           (click)="setActiveTab('video')"
-          class="tab-btn"
+          class="mode-btn"
         >
-          Video (MP4)
+          <span class="mode-icon">▶</span>
+          <span>VIDEO MODE</span>
         </button>
+        <div class="mode-divider"></div>
         <button 
           [class.active]="activeTab === 'audio'"
           (click)="setActiveTab('audio')"
-          class="tab-btn"
+          class="mode-btn"
         >
-          Audio (MP3)
+          <span class="mode-icon">♪</span>
+          <span>AUDIO MODE</span>
         </button>
       </div>
 
-      <!-- Video Formats -->
-      <div *ngIf="activeTab === 'video'" class="format-list">
-        <div *ngFor="let format of videoFormats" class="format-item">
-          <div class="format-info">
-            <div class="format-quality">{{ format.label }}</div>
-            <div class="format-details">{{ format.quality }} • {{ format.format.toUpperCase() }} • Est. {{ format.size }}</div>
+      <!-- Format Grid -->
+      <div class="format-grid">
+        <!-- Video Formats -->
+        <div *ngIf="activeTab === 'video'" class="format-container">
+          <div *ngFor="let format of videoFormats; let i = index" 
+               class="format-card"
+               [style.animation-delay]="i * 0.1 + 's'">
+            <div class="card-glow"></div>
+            <div class="format-header">
+              <div class="quality-badge">{{ format.label }}</div>
+              <div class="format-badge">{{ format.ext.toUpperCase() }}</div>
+            </div>
+            <div class="format-specs">
+              {{ format.quality }} • {{ format.format.toUpperCase() }}
+            </div>
+            <div class="format-size">EST: {{ format.size }}</div>
+            <button 
+              (click)="downloadVideo(format)"
+              [disabled]="isDownloading(format)"
+              class="extract-btn"
+            >
+              <span class="btn-icon">{{ isDownloading(format) ? '⟳' : '⬇' }}</span>
+              <span class="btn-text">
+                {{ isDownloading(format) ? 'PROCESSING' : 'EXTRACT' }}
+              </span>
+            </button>
           </div>
-          <button 
-            (click)="downloadVideo(format)"
-            [disabled]="isDownloading(format)"
-            class="download-btn"
-          >
-            {{ isDownloading(format) ? '⏳ Processing...' : '⬇️ Download ' + format.ext.toUpperCase() }}
-          </button>
         </div>
-      </div>
 
-      <!-- Audio Formats -->
-      <div *ngIf="activeTab === 'audio'" class="format-list">
-        <div *ngFor="let format of audioFormats" class="format-item">
-          <div class="format-info">
-            <div class="format-quality">{{ format.label }}</div>
-            <div class="format-details">{{ format.quality }} • {{ format.format.toUpperCase() }} • Est. {{ format.size }}</div>
+        <!-- Audio Formats -->
+        <div *ngIf="activeTab === 'audio'" class="format-container">
+          <div *ngFor="let format of audioFormats; let i = index" 
+               class="format-card"
+               [style.animation-delay]="i * 0.1 + 's'">
+            <div class="card-glow"></div>
+            <div class="format-header">
+              <div class="quality-badge">{{ format.label }}</div>
+              <div class="format-badge">{{ format.ext.toUpperCase() }}</div>
+            </div>
+            <div class="format-specs">
+              {{ format.quality }} • {{ format.format.toUpperCase() }}
+            </div>
+            <div class="format-size">EST: {{ format.size }}</div>
+            <button 
+              (click)="downloadVideo(format)"
+              [disabled]="isDownloading(format)"
+              class="extract-btn"
+            >
+              <span class="btn-icon">{{ isDownloading(format) ? '⟳' : '⬇' }}</span>
+              <span class="btn-text">
+                {{ isDownloading(format) ? 'PROCESSING' : 'EXTRACT' }}
+              </span>
+            </button>
           </div>
-          <button 
-            (click)="downloadVideo(format)"
-            [disabled]="isDownloading(format)"
-            class="download-btn"
-          >
-            {{ isDownloading(format) ? '⏳ Processing...' : '⬇️ Download ' + format.ext.toUpperCase() }}
-          </button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Footer -->
-  <div class="footer">
-    <p>⚠️ Note: Download videos you have rights to use. Respect copyright laws.</p>
+  <!-- Cyber Footer -->
+  <div class="cyber-footer">
+    <div class="footer-line"></div>
+    <p class="footer-warning">
+      <span class="warning-icon">⚠</span>
+      LEGAL COMPLIANCE REQUIRED • RESPECT DIGITAL RIGHTS MANAGEMENT
+    </p>
   </div>
 </div>
