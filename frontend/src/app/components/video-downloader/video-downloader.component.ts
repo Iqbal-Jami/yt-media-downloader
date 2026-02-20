@@ -2,7 +2,7 @@ import { Component, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { YoutubeService } from '../../services/youtube.service';
-import { VideoInfo, VideoFormat } from '../../models/video.model';
+import { VideoInfo, VideoFormat, DownloadHistoryItem } from '../../models/video.model';
 
 declare const particlesJS: any;
 
@@ -19,6 +19,12 @@ export class VideoDownloaderComponent implements AfterViewInit {
   errorMessage = '';
   videoInfo: VideoInfo | null = null;
   activeTab: 'video' | 'audio' = 'video';
+  mainView: 'downloader' | 'history' = 'downloader';
+  
+  // History
+  downloadHistory: DownloadHistoryItem[] = [];
+  historyLoading = false;
+  historyTotal = 0;
 
   videoFormats: VideoFormat[] = [
     { quality: '1080p', label: 'Full HD (1080p)', format: 'mp4', ext: 'mp4', size: '~500MB' },
@@ -40,6 +46,9 @@ export class VideoDownloaderComponent implements AfterViewInit {
   constructor(private youtubeService: YoutubeService) {}
 
   ngAfterViewInit() {
+    // Load history on component init
+    this.loadHistory();
+    
     // Initialize particles.js for cyber effect
     if (typeof particlesJS !== 'undefined') {
       particlesJS('particles-js', {
@@ -200,6 +209,9 @@ export class VideoDownloaderComponent implements AfterViewInit {
           const link = document.createElement('a');
           link.href = `http://localhost:3000${response.downloadUrl}`;
           link.download = response.filename || `video.${format.ext}`;
+          
+          // Reload history to show the new download
+          this.loadHistory();
           link.click();
           
           this.showSuccess(`Download started: ${response.filename}`);
@@ -238,5 +250,90 @@ export class VideoDownloaderComponent implements AfterViewInit {
   private showSuccess(message: string) {
     // You could implement a toast notification service here
     console.log('Success:', message);
+  }
+
+  // History Methods
+  loadHistory() {
+    this.historyLoading = true;
+    this.youtubeService.getHistory(50, 0).subscribe({
+      next: (response) => {
+        if (response.success && response.data) {
+          this.downloadHistory = response.data;
+          this.historyTotal = response.total;
+        }
+        this.historyLoading = false;
+      },
+      error: (error) => {
+        console.error('Failed to load history:', error);
+        this.historyLoading = false;
+      }
+    });
+  }
+
+  switchView(view: 'downloader' | 'history') {
+    this.mainView = view;
+    if (view === 'history') {
+      this.loadHistory();
+    }
+  }
+
+  deleteHistoryItem(id: string) {
+    if (!confirm('Are you sure you want to delete this item from history?')) {
+      return;
+    }
+
+    this.youtubeService.deleteHistoryItem(id).subscribe({
+      next: () => {
+        this.loadHistory();
+        this.showSuccess('History item deleted');
+      },
+      error: (error) => {
+        this.showError('Failed to delete history item');
+      }
+    });
+  }
+
+  clearAllHistory() {
+    if (!confirm('Are you sure you want to clear all download history?')) {
+      return;
+    }
+
+    this.youtubeService.clearHistory().subscribe({
+      next: () => {
+        this.downloadHistory = [];
+        this.historyTotal = 0;
+        this.showSuccess('History cleared');
+      },
+      error: (error) => {
+        this.showError('Failed to clear history');
+      }
+    });
+  }
+
+  redownloadFromHistory(item: DownloadHistoryItem) {
+    this.mainView = 'downloader';
+    this.videoUrl = `https://www.youtube.com/watch?v=${item.videoId}`;
+    this.fetchVideoInfo();
+  }
+
+  getHistoryDuration(duration?: number): string {
+    if (!duration) return 'N/A';
+    return this.youtubeService.formatDuration(duration);
+  }
+
+  getTimeSince(date: Date): string {
+    const now = new Date();
+    const downloadDate = new Date(date);
+    const diffMs = now.getTime() - downloadDate.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 30) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    
+    return downloadDate.toLocaleDateString();
   }
 }

@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { VideoInfo, DownloadResponse, ApiResponse } from '../models/video.model';
+import { VideoInfo, DownloadResponse, ApiResponse, HistoryResponse, DownloadHistoryItem } from '../models/video.model';
 
 @Injectable({
   providedIn: 'root'
@@ -48,5 +48,20 @@ export class YoutubeService {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  // Download History Methods
+  getHistory(limit: number = 50, offset: number = 0): Observable<HistoryResponse> {
+    return this.http.get<HistoryResponse>(`${this.apiUrl}/youtube/history`, {
+      params: { limit: limit.toString(), offset: offset.toString() }
+    });
+  }
+
+  clearHistory(): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/youtube/history`);
+  }
+
+  deleteHistoryItem(id: string): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/youtube/history/${id}`);
   }
 }

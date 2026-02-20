@@ -4,6 +4,7 @@ dist
 downloads
 *.log
 .env
+download-history.json
 
 # Testing
 coverage

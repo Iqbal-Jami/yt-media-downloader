@@ -5,12 +5,15 @@ import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { VideoInfo, DownloadResponse } from './interfaces/video.interface';
 import { spawn } from 'child_process';
+import { DownloadHistoryItem } from './interfaces/download-history.interface';
 
 @Injectable()
 export class YoutubeService {
   private readonly logger = new Logger(YoutubeService.name);
   private readonly downloadsDir = path.join(process.cwd(), 'downloads');
-  private agent: ytdl.Agent;
+  private readonly historyFile = path.join(process.cwd(), 'download-history.json');
+  // Agent removed - it was blocking server startup
+  // private agent: ytdl.Agent;
 
   constructor() {
     // Create downloads directory if it doesn't exist
@@ -19,8 +22,14 @@ export class YoutubeService {
       this.logger.log(`Created downloads directory: ${this.downloadsDir}`);
     }
 
-    // Initialize ytdl agent with cookies
-    this.agent = ytdl.createAgent();
+    // Initialize history file if it doesn't exist
+    if (!fs.existsSync(this.historyFile)) {
+      fs.writeFileSync(this.historyFile, JSON.stringify([], null, 2));
+      this.logger.log(`Created history file: ${this.historyFile}`);
+    }
+
+    // Removed agent initialization - it was blocking server startup
+    // this.agent = ytdl.createAgent();
 
     // Start cleanup interval
     this.startCleanupInterval();
@@ -34,9 +43,7 @@ export class YoutubeService {
         throw new Error('Invalid YouTube URL');
       }
 
-      const info = await ytdl.getInfo(url, {
-        agent: this.agent,
-      });
+      const info = await ytdl.getInfo(url);
       const videoDetails = info.videoDetails;
 
       return {
@@ -120,9 +127,7 @@ export class YoutubeService {
       const url = `https://www.youtube.com/watch?v=${videoId}`;
 
       // Get video info for title
-      const info = await ytdl.getInfo(url, {
-        agent: this.agent,
-      });
+      const info = await ytdl.getInfo(url);
       const title = info.videoDetails.title.replace(/[^\w\s-]/gi, '_');
       
       // Use the requested format directly (FFmpeg will handle MP3 conversion)
@@ -173,6 +178,18 @@ export class YoutubeService {
       
       this.logger.log(`Downloaded: ${downloadedFile}`);
       
+      // Add to download history
+      await this.addToHistory(
+        videoId,
+        info.videoDetails.title,
+        info.videoDetails.author.name,
+        info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url,
+        quality,
+        format,
+        undefined, // fileSize (we can calculate this if needed)
+        parseInt(info.videoDetails.lengthSeconds),
+      );
+      
       return {
         success: true,
         downloadUrl: `/api/youtube/downloads/${downloadedFile}`,
@@ -195,8 +212,7 @@ export class YoutubeService {
       }
 
       return ytdl(url, { 
-        quality: 'highest',
-        agent: this.agent,
+        quality: 'highest'
       });
     } catch (error) {
       this.logger.error(`Error streaming video: ${error.message}`);
@@ -213,6 +229,86 @@ export class YoutubeService {
     }
     
     return filepath;
+  }
+
+  // Download History Methods
+  private loadHistory(): DownloadHistoryItem[] {
+    try {
+      const data = fs.readFileSync(this.historyFile, 'utf-8');
+      return JSON.parse(data) || [];
+    } catch (error) {
+      this.logger.error(`Error loading history: ${error.message}`);
+      return [];
+    }
+  }
+
+  private saveHistory(history: DownloadHistoryItem[]): void {
+    try {
+      fs.writeFileSync(this.historyFile, JSON.stringify(history, null, 2), 'utf-8');
+    } catch (error) {
+      this.logger.error(`Error saving history: ${error.message}`);
+    }
+  }
+
+  async addToHistory(
+    videoId: string,
+    title: string,
+    author: string,
+    thumbnail: string,
+    quality: string,
+    format: string,
+    fileSize?: string,
+    duration?: number,
+  ): Promise<void> {
+    const history = this.loadHistory();
+    
+    const historyItem: DownloadHistoryItem = {
+      id: uuidv4(),
+      videoId,
+      title,
+      author,
+      thumbnail,
+      quality,
+      format,
+      downloadDate: new Date(),
+      fileSize,
+      duration,
+    };
+
+    history.unshift(historyItem); // Add to beginning
+    
+    // Keep only last 100 items
+    if (history.length > 100) {
+      history.splice(100);
+    }
+
+    this.saveHistory(history);
+    this.logger.log(`Added to history: ${title}`);
+  }
+
+  async getHistory(limit: number = 50, offset: number = 0): Promise<{
+    items: DownloadHistoryItem[];
+    total: number;
+  }> {
+    const history = this.loadHistory();
+    const items = history.slice(offset, offset + limit);
+    
+    return {
+      items,
+      total: history.length,
+    };
+  }
+
+  async clearHistory(): Promise<void> {
+    this.saveHistory([]);
+    this.logger.log('Download history cleared');
+  }
+
+  async deleteHistoryItem(id: string): Promise<void> {
+    let history = this.loadHistory();
+    history = history.filter(item => item.id !== id);
+    this.saveHistory(history);
+    this.logger.log(`Deleted history item: ${id}`);
   }
 
   private startCleanupInterval() {

@@ -32,8 +32,31 @@
       </h1>
       <p class="cyber-subtitle">TRANSFORMER EDITION • MEDIA EXTRACTION PROTOCOL</p>
     </div>
+    
+    <!-- View Switcher -->
+    <div class="view-switcher">
+      <button 
+        [class.active]="mainView === 'downloader'"
+        (click)="switchView('downloader')"
+        class="view-btn"
+      >
+        <span class="view-icon">⚡</span>
+        <span>DOWNLOADER</span>
+      </button>
+      <button 
+        [class.active]="mainView === 'history'"
+        (click)="switchView('history')"
+        class="view-btn"
+      >
+        <span class="view-icon">📜</span>
+        <span>HISTORY ({{ historyTotal }})</span>
+      </button>
+    </div>
   </div>
 
+  <!-- Downloader View -->
+  <div *ngIf="mainView === 'downloader'">
+  
   <!-- Command Input Panel -->
   <div class="command-panel">
     <div class="panel-border"></div>
@@ -220,4 +243,98 @@
       LEGAL COMPLIANCE REQUIRED • RESPECT DIGITAL RIGHTS MANAGEMENT
     </p>
   </div>
+  </div>
+
+  <!-- History View -->
+  <div *ngIf="mainView === 'history'" class="history-view">
+    <div class="history-header">
+      <h2 class="history-title">
+        <span class="glitch-text" data-text="DOWNLOAD ARCHIVES">DOWNLOAD ARCHIVES</span>
+      </h2>
+      <button 
+        *ngIf="downloadHistory.length > 0"
+        (click)="clearAllHistory()" 
+        class="clear-history-btn"
+      >
+        <span>🗑</span> CLEAR ALL
+      </button>
+    </div>
+
+    <!-- Loading State -->
+    <div *ngIf="historyLoading" class="hologram-loader">
+      <div class="loader-ring"></div>
+      <div class="loader-ring-2"></div>
+      <div class="loader-core"></div>
+      <div class="loader-text">
+        <span class="scanning-text">LOADING HISTORY</span>
+        <span class="loading-dots">...</span>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="!historyLoading && downloadHistory.length === 0" class="empty-state">
+      <div class="empty-icon">📭</div>
+      <h3 class="empty-title">NO DOWNLOAD HISTORY</h3>
+      <p class="empty-message">Your download history will appear here once you start downloading videos.</p>
+      <button (click)="switchView('downloader')" class="cyber-button">
+        <span class="button-text">START DOWNLOADING</span>
+      </button>
+    </div>
+
+    <!-- History List -->
+    <div *ngIf="!historyLoading && downloadHistory.length > 0" class="history-list">
+      <div *ngFor="let item of downloadHistory; let i = index" 
+           class="history-item"
+           [style.animation-delay]="i * 0.05 + 's'">
+        <div class="history-card">
+          <div class="card-glow"></div>
+          
+          <div class="history-thumbnail">
+            <img [src]="item.thumbnail" [alt]="item.title">
+            <div class="thumbnail-overlay">
+              <span class="format-badge">{{ item.format.toUpperCase() }}</span>
+              <span class="quality-badge">{{ item.quality }}</span>
+            </div>
+          </div>
+          
+          <div class="history-details">
+            <h4 class="history-video-title">{{ item.title }}</h4>
+            
+            <div class="history-meta">
+              <span class="meta-item">
+                <span class="meta-icon">👤</span>
+                <span>{{ item.author }}</span>
+              </span>
+              <span class="meta-item" *ngIf="item.duration">
+                <span class="meta-icon">⏱</span>
+                <span>{{ getHistoryDuration(item.duration) }}</span>
+              </span>
+              <span class="meta-item">
+                <span class="meta-icon">📅</span>
+                <span>{{ getTimeSince(item.downloadDate) }}</span>
+              </span>
+            </div>
+            
+            <div class="history-actions">
+              <button 
+                (click)="redownloadFromHistory(item)" 
+                class="history-action-btn redownload"
+                title="Download again"
+              >
+                <span>⬇</span> Re-download
+              </button>
+              <button 
+                (click)="deleteHistoryItem(item.id)" 
+                class="history-action-btn delete"
+                title="Remove from history"
+              >
+                <span>🗑</span> Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>

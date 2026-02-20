@@ -8,10 +8,13 @@ import {
   HttpException,
   HttpStatus,
   StreamableFile,
+  Query,
+  Delete,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { YoutubeService } from './youtube.service';
 import { VideoInfoDto, DownloadVideoDto } from './dto/video-info.dto';
+import { GetHistoryDto } from './dto/download-history.dto';
 
 @Controller('youtube')
 export class YoutubeController {
@@ -104,6 +107,69 @@ export class YoutubeController {
           error: error.message || 'File not found',
         },
         HttpStatus.NOT_FOUND,
+      );
+    }
+  }
+
+  // Download History Endpoints
+  @Get('history')
+  async getHistory(@Query() query: GetHistoryDto) {
+    try {
+      const limit = query.limit || 50;
+      const offset = query.offset || 0;
+      
+      const result = await this.youtubeService.getHistory(limit, offset);
+      
+      return {
+        success: true,
+        data: result.items,
+        total: result.total,
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          error: error.message || 'Failed to fetch download history',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Delete('history')
+  async clearHistory() {
+    try {
+      await this.youtubeService.clearHistory();
+      return {
+        success: true,
+        message: 'Download history cleared successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          error: error.message || 'Failed to clear history',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Delete('history/:id')
+  async deleteHistoryItem(@Param('id') id: string) {
+    try {
+      await this.youtubeService.deleteHistoryItem(id);
+      return {
+        success: true,
+        message: 'History item deleted successfully',
+      };
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          error: error.message || 'Failed to delete history item',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }

@@ -1,12 +1,11 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet } from '@angular/router';
 import { VideoDownloaderComponent } from './components/video-downloader/video-downloader.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, VideoDownloaderComponent],
+  imports: [CommonModule, VideoDownloaderComponent],
   template: `
     <div class="app-container">
       <app-video-downloader></app-video-downloader>
