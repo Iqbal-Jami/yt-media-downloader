@@ -199,7 +199,7 @@
             >
               <span class="btn-icon">{{ isDownloading(format) ? '⟳' : '⬇' }}</span>
               <span class="btn-text">
-                {{ isDownloading(format) ? 'PROCESSING' : 'EXTRACT' }}
+                {{ isDownloading(format) ? 'PROCESSING ' + getDownloadProgress(format).toFixed(0) + '%' : 'EXTRACT' }}
               </span>
             </button>
           </div>
@@ -226,7 +226,7 @@
             >
               <span class="btn-icon">{{ isDownloading(format) ? '⟳' : '⬇' }}</span>
               <span class="btn-text">
-                {{ isDownloading(format) ? 'PROCESSING' : 'EXTRACT' }}
+                {{ isDownloading(format) ? 'PROCESSING ' + getDownloadProgress(format).toFixed(0) + '%' : 'EXTRACT' }}
               </span>
             </button>
           </div>

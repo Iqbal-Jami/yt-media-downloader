@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter } from 'events';
 import ytdl from '@distube/ytdl-core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -8,7 +9,7 @@ import { spawn } from 'child_process';
 import { DownloadHistoryItem } from './interfaces/download-history.interface';
 
 @Injectable()
-export class YoutubeService {
+export class YoutubeService extends EventEmitter {
   private readonly logger = new Logger(YoutubeService.name);
   private readonly downloadsDir = path.join(process.cwd(), 'downloads');
   private readonly historyFile = path.join(process.cwd(), 'download-history.json');
@@ -16,6 +17,7 @@ export class YoutubeService {
   // private agent: ytdl.Agent;
 
   constructor() {
+    super();
     // Create downloads directory if it doesn't exist
     if (!fs.existsSync(this.downloadsDir)) {
       fs.mkdirSync(this.downloadsDir, { recursive: true });
@@ -62,7 +64,7 @@ export class YoutubeService {
   }
 
   // Helper method to execute yt-dlp with proper path handling for spaces
-  private async executeYtdlp(url: string, args: string[]): Promise<void> {
+  private async executeYtdlp(url: string, args: string[], downloadKey?: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const ytdlpPath = path.join(
         __dirname,
@@ -84,27 +86,84 @@ export class YoutubeService {
 
       let stdout = '';
       let stderr = '';
+      let lastProgress = 0;
 
       child.stdout.on('data', (data) => {
-        stdout += data.toString();
+        const output = data.toString();
+        stdout += output;
+        
+        // Parse progress from yt-dlp output
+        if (downloadKey) {
+          // Look for download progress patterns
+          // yt-dlp outputs: [download]  45.2% of 10.5MiB at 1.2MiB/s ETA 00:05
+          const downloadMatch = output.match(/\[download\]\s+(\d+\.?\d*)%/);
+          if (downloadMatch) {
+            const progress = Math.min(parseFloat(downloadMatch[1]), 99);
+            if (progress > lastProgress) {
+              lastProgress = progress;
+              this.emit('download-progress', {
+                downloadKey,
+                progress
+              });
+              this.logger.log(`Download progress: ${progress}%`);
+            }
+          }
+        }
       });
 
       child.stderr.on('data', (data) => {
-        stderr += data.toString();
+        const output = data.toString();
+        stderr += output;
+        
+        // yt-dlp outputs progress to stderr
+        if (downloadKey) {
+          const downloadMatch = output.match(/\[download\]\s+(\d+\.?\d*)%/);
+          if (downloadMatch) {
+            const progress = Math.min(parseFloat(downloadMatch[1]), 99);
+            if (progress > lastProgress) {
+              lastProgress = progress;
+              this.emit('download-progress', {
+                downloadKey,
+                progress
+              });
+              this.logger.log(`Download progress: ${progress}%`);
+            }
+          }
+        }
       });
 
       child.on('error', (error) => {
         this.logger.error(`Spawn error: ${error.message}`);
+        if (downloadKey) {
+          this.emit('download-progress', {
+            downloadKey,
+            progress: 0,
+            error: error.message
+          });
+        }
         reject(error);
       });
 
       child.on('close', (code) => {
         if (code === 0) {
           this.logger.log('yt-dlp completed successfully');
+          if (downloadKey) {
+            this.emit('download-progress', {
+              downloadKey,
+              progress: 100
+            });
+          }
           resolve();
         } else {
           this.logger.error(`yt-dlp exited with code ${code}`);
           this.logger.error(`stderr: ${stderr}`);
+          if (downloadKey) {
+            this.emit('download-progress', {
+              downloadKey,
+              progress: 0,
+              error: `yt-dlp failed with code ${code}`
+            });
+          }
           reject(new Error(`yt-dlp failed with code ${code}: ${stderr || stdout}`));
         }
       });
@@ -124,7 +183,14 @@ export class YoutubeService {
       this.logger.log(`Format: ${format}`);
       this.logger.log(`======================`);
       
+      const downloadKey = `${videoId}_${quality}_${format}`;
       const url = `https://www.youtube.com/watch?v=${videoId}`;
+
+      // Emit initial progress
+      this.emit('download-progress', {
+        downloadKey,
+        progress: 0
+      });
 
       // Get video info for title
       const info = await ytdl.getInfo(url);
@@ -163,9 +229,9 @@ export class YoutubeService {
         args.push('--merge-output-format', 'mp4');
       }
 
-      // Download using yt-dlp
+      // Download using yt-dlp with progress tracking
       this.logger.log(`Starting download to: ${filepath}`);
-      await this.executeYtdlp(url, args);
+      await this.executeYtdlp(url, args, downloadKey);
       
       // Find the actual downloaded file (yt-dlp may add format codes)
       const baseFilename = filename.replace(/\.[^.]+$/, ''); // Remove extension

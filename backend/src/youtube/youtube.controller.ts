@@ -10,8 +10,11 @@ import {
   StreamableFile,
   Query,
   Delete,
+  Sse,
+  MessageEvent,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { Observable } from 'rxjs';
 import { YoutubeService } from './youtube.service';
 import { VideoInfoDto, DownloadVideoDto } from './dto/video-info.dto';
 import { GetHistoryDto } from './dto/download-history.dto';
@@ -59,6 +62,33 @@ export class YoutubeController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  @Sse('download/progress/:videoId/:quality/:format')
+  downloadProgress(
+    @Param('videoId') videoId: string,
+    @Param('quality') quality: string,
+    @Param('format') format: string,
+  ): Observable<MessageEvent> {
+    return new Observable((observer) => {
+      const downloadKey = `${videoId}_${quality}_${format}`;
+      
+      const progressHandler = (data: any) => {
+        if (data.downloadKey === downloadKey) {
+          observer.next({ data: { progress: data.progress } } as MessageEvent);
+          
+          if (data.progress >= 100 || data.error) {
+            observer.complete();
+          }
+        }
+      };
+
+      this.youtubeService.on('download-progress', progressHandler);
+
+      return () => {
+        this.youtubeService.off('download-progress', progressHandler);
+      };
+    });
   }
 
   @Get('stream/:videoId')

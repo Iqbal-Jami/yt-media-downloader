@@ -1,14 +1,22 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { VideoInfo, DownloadResponse, ApiResponse, HistoryResponse, DownloadHistoryItem } from '../models/video.model';
+
+export interface DownloadProgress {
+  videoId: string;
+  quality: string;
+  format: string;
+  progress: number;
+}
 
 @Injectable({
   providedIn: 'root'
 })
 export class YoutubeService {
   private apiUrl = environment.apiUrl;
+  private progressSubjects = new Map<string, Subject<number>>();
 
   constructor(private http: HttpClient) { }
 
@@ -24,6 +32,69 @@ export class YoutubeService {
       quality,
       format
     });
+  }
+
+  watchDownloadProgress(videoId: string, quality: string, format: string): Observable<number> {
+    const key = `${videoId}_${quality}_${format}`;
+    
+    if (!this.progressSubjects.has(key)) {
+      const subject = new Subject<number>();
+      this.progressSubjects.set(key, subject);
+
+      // Encode URL parameters properly
+      const encodedVideoId = encodeURIComponent(videoId);
+      const encodedQuality = encodeURIComponent(quality);
+      const encodedFormat = encodeURIComponent(format);
+      
+      // Connect to SSE endpoint
+      const eventSource = new EventSource(
+        `${this.apiUrl}/youtube/download/progress/${encodedVideoId}/${encodedQuality}/${encodedFormat}`
+      );
+
+      eventSource.onopen = () => {
+        console.log('SSE connection opened');
+        subject.next(0);
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.progress !== undefined) {
+            subject.next(data.progress);
+            console.log('Progress update:', data.progress);
+            
+            // Complete and cleanup when download finishes
+            if (data.progress >= 100) {
+              setTimeout(() => {
+                subject.complete();
+                eventSource.close();
+                this.progressSubjects.delete(key);
+              }, 500);
+            }
+          }
+        } catch (error) {
+          console.error('Error parsing SSE data:', error);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('SSE error:', error);
+        eventSource.close();
+        // Don't complete on error immediately, keep the subject open for manual updates
+        this.progressSubjects.delete(key);
+      };
+
+      // Cleanup after 5 minutes to prevent memory leaks
+      setTimeout(() => {
+        if (this.progressSubjects.has(key)) {
+          eventSource.close();
+          subject.complete();
+          this.progressSubjects.delete(key);
+        }
+      }, 300000);
+    }
+
+    return this.progressSubjects.get(key)!.asObservable();
   }
 
   extractVideoId(url: string): string | null {

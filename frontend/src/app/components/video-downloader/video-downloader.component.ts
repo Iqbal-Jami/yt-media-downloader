@@ -42,6 +42,7 @@ export class VideoDownloaderComponent implements AfterViewInit {
   ];
 
   downloadingFormats = new Set<string>();
+  downloadProgress = new Map<string, number>();
 
   constructor(private youtubeService: YoutubeService) {}
 
@@ -195,6 +196,32 @@ export class VideoDownloaderComponent implements AfterViewInit {
 
     const downloadKey = `${format.quality}-${format.format}`;
     this.downloadingFormats.add(downloadKey);
+    this.downloadProgress.set(downloadKey, 0);
+
+    // Start progress simulation as fallback
+    const progressInterval = setInterval(() => {
+      const currentProgress = this.downloadProgress.get(downloadKey) || 0;
+      if (currentProgress < 90 && this.downloadingFormats.has(downloadKey)) {
+        // Slow incremental progress as fallback
+        this.downloadProgress.set(downloadKey, Math.min(currentProgress + Math.random() * 5, 90));
+      }
+    }, 2000);
+
+    // Start watching progress via SSE
+    const progressSub = this.youtubeService.watchDownloadProgress(
+      this.videoInfo.videoId,
+      format.quality,
+      format.format as 'mp4' | 'mp3'
+    ).subscribe({
+      next: (progress) => {
+        // Real progress from server overrides simulated progress
+        this.downloadProgress.set(downloadKey, progress);
+      },
+      error: (error) => {
+        console.error('Progress tracking error:', error);
+        // Continue with simulated progress on error
+      }
+    });
 
     this.youtubeService.downloadVideo(
       this.videoInfo.videoId,
@@ -202,7 +229,10 @@ export class VideoDownloaderComponent implements AfterViewInit {
       format.format as 'mp4' | 'mp3'
     ).subscribe({
       next: (response) => {
+        clearInterval(progressInterval);
+        progressSub.unsubscribe();
         this.downloadingFormats.delete(downloadKey);
+        this.downloadProgress.delete(downloadKey);
         
         if (response.success && response.downloadUrl) {
           // Trigger download
@@ -220,7 +250,10 @@ export class VideoDownloaderComponent implements AfterViewInit {
         }
       },
       error: (error) => {
+        clearInterval(progressInterval);
+        progressSub.unsubscribe();
         this.downloadingFormats.delete(downloadKey);
+        this.downloadProgress.delete(downloadKey);
         this.showError(error.error?.error || 'Download failed. Make sure the backend server is running.');
       }
     });
@@ -229,6 +262,11 @@ export class VideoDownloaderComponent implements AfterViewInit {
   isDownloading(format: VideoFormat): boolean {
     const downloadKey = `${format.quality}-${format.format}`;
     return this.downloadingFormats.has(downloadKey);
+  }
+
+  getDownloadProgress(format: VideoFormat): number {
+    const downloadKey = `${format.quality}-${format.format}`;
+    return this.downloadProgress.get(downloadKey) || 0;
   }
 
   setActiveTab(tab: 'video' | 'audio') {

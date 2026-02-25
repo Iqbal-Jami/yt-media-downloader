@@ -1,3 +1,6 @@
+import { IsOptional, IsInt, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+
 export class DownloadHistoryDto {
   id: string;
   videoId: string;
@@ -12,6 +15,15 @@ export class DownloadHistoryDto {
 }
 
 export class GetHistoryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   limit?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
   offset?: number;
 }
