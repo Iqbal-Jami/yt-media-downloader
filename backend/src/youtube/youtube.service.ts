@@ -7,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { VideoInfo, DownloadResponse } from './interfaces/video.interface';
 import { spawn } from 'child_process';
 import { DownloadHistoryItem } from './interfaces/download-history.interface';
+import { PlaylistInfo, PlaylistVideo, PlaylistDownloadResponse, PlaylistDownloadProgress } from './interfaces/playlist.interface';
 
 @Injectable()
 export class YoutubeService extends EventEmitter {
@@ -375,6 +376,215 @@ export class YoutubeService extends EventEmitter {
     history = history.filter(item => item.id !== id);
     this.saveHistory(history);
     this.logger.log(`Deleted history item: ${id}`);
+  }
+
+  // Playlist Methods
+  async getPlaylistInfo(playlistId: string): Promise<PlaylistInfo> {
+    try {
+      this.logger.log(`Fetching playlist info for: ${playlistId}`);
+      
+      // Validate playlist type - reject Mix/Radio playlists
+      if (playlistId.startsWith('RDEM') || playlistId.startsWith('RDMM') || 
+          playlistId.startsWith('RDCLAK') || playlistId.startsWith('RDAO')) {
+        throw new Error('YouTube Mix, Radio, and auto-generated playlists cannot be downloaded. Please use a regular user-created playlist.');
+      }
+      
+      const url = `https://www.youtube.com/playlist?list=${playlistId}`;
+      
+      // Use full path to yt-dlp.exe
+      const ytdlpPath = path.join(process.cwd(), 'yt-dlp.exe');
+      
+      return new Promise<PlaylistInfo>((resolve, reject) => {
+        const ytdlp = spawn(ytdlpPath, [
+          '--flat-playlist',
+          '--dump-json',
+          url
+        ]);
+
+        let output = '';
+        let errorOutput = '';
+
+        ytdlp.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+
+        ytdlp.stderr.on('data', (data) => {
+          errorOutput += data.toString();
+          this.logger.debug(`yt-dlp stderr: ${data.toString()}`);
+        });
+
+        ytdlp.on('close', (code) => {
+          if (code !== 0) {
+            this.logger.error(`yt-dlp process exited with code ${code}`);
+            this.logger.error(`Error output: ${errorOutput}`);
+            
+            // Provide user-friendly error messages
+            let errorMessage = 'Failed to fetch playlist information';
+            
+            if (errorOutput.includes('unviewable') || errorOutput.includes('This playlist type is unviewable')) {
+              errorMessage = 'This playlist type is not supported. Please use a regular public or unlisted playlist, not YouTube Mix, Radio, or auto-generated playlists.';
+            } else if (errorOutput.includes('Private video') || errorOutput.includes('private')) {
+              errorMessage = 'This playlist is private and cannot be accessed.';
+            } else if (errorOutput.includes('not available') || errorOutput.includes('removed')) {
+              errorMessage = 'This playlist is not available or has been removed.';
+            } else if (errorOutput.includes('Invalid')) {
+              errorMessage = 'Invalid playlist URL or ID.';
+            }
+            
+            reject(new Error(errorMessage));
+            return;
+          }
+
+          try {
+            const lines = output.trim().split('\n').filter(line => line.trim());
+            const videos: PlaylistVideo[] = [];
+            let playlistTitle = '';
+            let playlistAuthor = '';
+            let playlistThumbnail = '';
+
+            lines.forEach((line, index) => {
+              try {
+                const data = JSON.parse(line);
+                
+                if (index === 0) {
+                  playlistTitle = data.playlist_title || data.title || 'Unknown Playlist';
+                  playlistAuthor = data.uploader || data.channel || 'Unknown';
+                  playlistThumbnail = data.thumbnail || (data.thumbnails && data.thumbnails[0]?.url) || '';
+                }
+
+                if (data.id) {
+                  videos.push({
+                    videoId: data.id,
+                    title: data.title || 'Unknown Title',
+                    author: data.uploader || data.channel || 'Unknown',
+                    thumbnail: data.thumbnail || (data.thumbnails && data.thumbnails[0]?.url) || '',
+                    duration: data.duration || 0,
+                    index: index + 1
+                  });
+                }
+              } catch (parseError) {
+                this.logger.warn(`Failed to parse line: ${line}`);
+              }
+            });
+
+            if (videos.length === 0) {
+              reject(new Error('No videos found in playlist'));
+              return;
+            }
+
+            const playlistInfo: PlaylistInfo = {
+              playlistId,
+              title: playlistTitle,
+              author: playlistAuthor,
+              thumbnail: playlistThumbnail,
+              videoCount: videos.length,
+              videos
+            };
+
+            this.logger.log(`Playlist info fetched: ${videos.length} videos`);
+            resolve(playlistInfo);
+          } catch (error) {
+            this.logger.error(`Error parsing playlist info: ${error.message}`);
+            reject(error);
+          }
+        });
+      });
+    } catch (error) {
+      this.logger.error(`Error fetching playlist info: ${error.message}`);
+      throw new Error(`Failed to get playlist information: ${error.message}`);
+    }
+  }
+
+  async downloadPlaylist(
+    playlistId: string,
+    quality: string,
+    format: 'mp4' | 'mp3',
+    selectedVideoIds?: string[]
+  ): Promise<PlaylistDownloadResponse> {
+    try {
+      this.logger.log(`Starting playlist download: ${playlistId}`);
+      
+      // Get playlist info first
+      const playlistInfo = await this.getPlaylistInfo(playlistId);
+      
+      // Filter videos if selectedVideoIds is provided
+      let videosToDownload = playlistInfo.videos;
+      if (selectedVideoIds && selectedVideoIds.length > 0) {
+        videosToDownload = playlistInfo.videos.filter(v => 
+          selectedVideoIds.includes(v.videoId)
+        );
+      }
+
+      const totalVideos = videosToDownload.length;
+      let downloadedVideos = 0;
+      const failedVideos: string[] = [];
+      const downloadUrls: string[] = [];
+      const filenames: string[] = [];
+
+      this.logger.log(`Downloading ${totalVideos} videos from playlist`);
+
+      // Download each video sequentially
+      for (let i = 0; i < videosToDownload.length; i++) {
+        const video = videosToDownload[i];
+        
+        try {
+          // Emit progress for current video
+          const progress: PlaylistDownloadProgress = {
+            playlistId,
+            totalVideos,
+            currentVideo: i + 1,
+            currentVideoTitle: video.title,
+            currentVideoProgress: 0,
+            overallProgress: Math.round((i / totalVideos) * 100),
+            status: 'downloading'
+          };
+          
+          this.emit('playlist-progress', progress);
+
+          // Download the video
+          const result = await this.downloadVideo(video.videoId, quality, format);
+          
+          if (result.success && result.downloadUrl && result.filename) {
+            downloadedVideos++;
+            downloadUrls.push(result.downloadUrl);
+            filenames.push(result.filename);
+            this.logger.log(`Downloaded ${i + 1}/${totalVideos}: ${video.title}`);
+          } else {
+            failedVideos.push(video.title);
+            this.logger.error(`Failed to download: ${video.title}`);
+          }
+        } catch (error) {
+          failedVideos.push(video.title);
+          this.logger.error(`Error downloading ${video.title}: ${error.message}`);
+        }
+      }
+
+      // Emit final progress
+      const finalProgress: PlaylistDownloadProgress = {
+        playlistId,
+        totalVideos,
+        currentVideo: totalVideos,
+        currentVideoTitle: 'Completed',
+        currentVideoProgress: 100,
+        overallProgress: 100,
+        status: 'completed'
+      };
+      
+      this.emit('playlist-progress', finalProgress);
+
+      return {
+        success: true,
+        message: `Downloaded ${downloadedVideos} of ${totalVideos} videos`,
+        totalVideos,
+        downloadedVideos,
+        failedVideos,
+        downloadUrls,
+        filenames
+      };
+    } catch (error) {
+      this.logger.error(`Error downloading playlist: ${error.message}`);
+      throw new Error(`Failed to download playlist: ${error.message}`);
+    }
   }
 
   private startCleanupInterval() {

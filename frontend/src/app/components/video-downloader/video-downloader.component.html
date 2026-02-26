@@ -77,6 +77,11 @@
       <div class="input-decoration right"></div>
     </div>
     
+    <div class="input-hint">
+      <span class="hint-icon">💡</span>
+      <span class="hint-text">Supports: Single videos or regular playlists (not YouTube Mix/Radio)</span>
+    </div>
+    
     <button 
       (click)="fetchVideoInfo()" 
       [disabled]="isLoading"
@@ -228,6 +233,197 @@
               <span class="btn-text">
                 {{ isDownloading(format) ? 'PROCESSING ' + getDownloadProgress(format).toFixed(0) + '%' : 'EXTRACT' }}
               </span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Playlist Data Panel -->
+  <div *ngIf="playlistInfo && !isLoading && isPlaylist" class="data-panel playlist-panel">
+    
+    <!-- Playlist Preview -->
+    <div class="holo-preview">
+      <div class="preview-frame">
+        <div class="frame-corners"></div>
+        <div class="preview-glow"></div>
+        <img [src]="playlistInfo.thumbnail" [alt]="playlistInfo.title" class="holo-thumbnail">
+        <div class="scan-overlay"></div>
+        <div class="playlist-badge">
+          <span class="badge-icon">📑</span>
+          <span class="badge-text">PLAYLIST</span>
+        </div>
+      </div>
+      
+      <div class="data-readout">
+        <h3 class="data-title">{{ playlistInfo.title }}</h3>
+        <div class="data-stats">
+          <div class="stat-item">
+            <span class="stat-icon">📺</span>
+            <span class="stat-value">{{ playlistInfo.videoCount }} Videos</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-icon">👤</span>
+            <span class="stat-value">{{ playlistInfo.author }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Playlist Progress (if downloading) -->
+    <div *ngIf="playlistDownloading && playlistProgress" class="playlist-progress-panel">
+      <div class="progress-header">
+        <h4>Downloading Playlist...</h4>
+        <span class="progress-status">{{ playlistProgress.currentVideo }} / {{ playlistProgress.totalVideos }}</span>
+      </div>
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill" [style.width.%]="playlistProgress.overallProgress"></div>
+      </div>
+      <div class="progress-info">
+        <span>Current: {{ playlistProgress.currentVideoTitle }}</span>
+        <span>{{ playlistProgress.overallProgress.toFixed(0) }}%</span>
+      </div>
+    </div>
+
+    <!-- Video Selection List -->
+    <div class="playlist-videos" *ngIf="!playlistDownloading">
+      <div class="videos-header">
+        <h4 class="videos-title">[ SELECT VIDEOS TO DOWNLOAD ]</h4>
+        <div class="select-all-wrapper">
+          <label class="cyber-checkbox">
+            <input 
+              type="checkbox" 
+              [checked]="selectAllPlaylist"
+              (change)="toggleSelectAll()"
+            >
+            <span class="checkbox-mark"></span>
+            <span class="checkbox-label">SELECT ALL</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="videos-list">
+        <div 
+          *ngFor="let video of playlistInfo.videos; let i = index" 
+          class="playlist-video-item"
+          [class.selected]="selectedPlaylistVideos.has(video.videoId)"
+        >
+          <label class="video-checkbox">
+            <input 
+              type="checkbox" 
+              [checked]="selectedPlaylistVideos.has(video.videoId)"
+              (change)="togglePlaylistVideo(video.videoId)"
+            >
+            <span class="checkbox-mark"></span>
+          </label>
+          
+          <div class="video-thumbnail">
+            <img [src]="video.thumbnail" [alt]="video.title">
+            <span class="video-index">{{ video.index }}</span>
+          </div>
+          
+          <div class="video-details">
+            <h5 class="video-title">{{ video.title }}</h5>
+            <div class="video-meta">
+              <span class="meta-item">
+                <span class="meta-icon">👤</span>
+                {{ video.author }}
+              </span>
+              <span class="meta-item">
+                <span class="meta-icon">⏱</span>
+                {{ formatPlaylistVideoDuration(video.duration) }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Playlist Download Terminal -->
+    <div class="download-terminal" *ngIf="!playlistDownloading">
+      <div class="terminal-header">
+        <div class="terminal-buttons">
+          <span class="term-btn red"></span>
+          <span class="term-btn yellow"></span>
+          <span class="term-btn green"></span>
+        </div>
+        <span class="terminal-title">[ PLAYLIST EXTRACTION PROTOCOLS ]</span>
+      </div>
+      
+      <!-- Mode Selector -->
+      <div class="mode-selector">
+        <button 
+          [class.active]="activeTab === 'video'"
+          (click)="setActiveTab('video')"
+          class="mode-btn"
+        >
+          <span class="mode-icon">▶</span>
+          <span>VIDEO MODE</span>
+        </button>
+        <div class="mode-divider"></div>
+        <button 
+          [class.active]="activeTab === 'audio'"
+          (click)="setActiveTab('audio')"
+          class="mode-btn"
+        >
+          <span class="mode-icon">♪</span>
+          <span>AUDIO MODE</span>
+        </button>
+      </div>
+
+      <!-- Format Grid for Playlist -->
+      <div class="format-grid">
+        <!-- Video Formats -->
+        <div *ngIf="activeTab === 'video'" class="format-container">
+          <div *ngFor="let format of videoFormats; let i = index" 
+               class="format-card"
+               [style.animation-delay]="i * 0.1 + 's'">
+            <div class="card-glow"></div>
+            <div class="format-header">
+              <div class="quality-badge">{{ format.label }}</div>
+              <div class="format-badge">{{ format.ext.toUpperCase() }}</div>
+            </div>
+            <div class="format-specs">
+              {{ format.quality }} • {{ format.format.toUpperCase() }}
+            </div>
+            <div class="format-info">
+              Selected: {{ selectedPlaylistVideos.size }} / {{ playlistInfo.videoCount }}
+            </div>
+            <button 
+              (click)="downloadPlaylist(format)"
+              [disabled]="selectedPlaylistVideos.size === 0"
+              class="extract-btn"
+            >
+              <span class="btn-icon">⬇</span>
+              <span class="btn-text">EXTRACT PLAYLIST</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Audio Formats -->
+        <div *ngIf="activeTab === 'audio'" class="format-container">
+          <div *ngFor="let format of audioFormats; let i = index" 
+               class="format-card"
+               [style.animation-delay]="i * 0.1 + 's'">
+            <div class="card-glow"></div>
+            <div class="format-header">
+              <div class="quality-badge">{{ format.label }}</div>
+              <div class="format-badge">{{ format.ext.toUpperCase() }}</div>
+            </div>
+            <div class="format-specs">
+              {{ format.quality }} • {{ format.format.toUpperCase() }}
+            </div>
+            <div class="format-info">
+              Selected: {{ selectedPlaylistVideos.size }} / {{ playlistInfo.videoCount }}
+            </div>
+            <button 
+              (click)="downloadPlaylist(format)"
+              [disabled]="selectedPlaylistVideos.size === 0"
+              class="extract-btn"
+            >
+              <span class="btn-icon">⬇</span>
+              <span class="btn-text">EXTRACT PLAYLIST</span>
             </button>
           </div>
         </div>

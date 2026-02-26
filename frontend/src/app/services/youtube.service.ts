@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, Subject } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { VideoInfo, DownloadResponse, ApiResponse, HistoryResponse, DownloadHistoryItem } from '../models/video.model';
+import { VideoInfo, DownloadResponse, ApiResponse, HistoryResponse, DownloadHistoryItem, PlaylistInfo, PlaylistDownloadResponse, PlaylistDownloadProgress } from '../models/video.model';
 
 export interface DownloadProgress {
   videoId: string;
@@ -17,6 +17,7 @@ export interface DownloadProgress {
 export class YoutubeService {
   private apiUrl = environment.apiUrl;
   private progressSubjects = new Map<string, Subject<number>>();
+  private playlistProgressSubjects = new Map<string, Subject<PlaylistDownloadProgress>>();
 
   constructor(private http: HttpClient) { }
 
@@ -119,6 +120,100 @@ export class YoutubeService {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  // Playlist Methods
+  extractPlaylistId(url: string): string | null {
+    const patterns = [
+      /[?&]list=([^&\n?#]+)/,
+      /^([a-zA-Z0-9_-]+)$/
+    ];
+
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match) return match[1];
+    }
+    return null;
+  }
+
+  isPlaylistUrl(url: string): boolean {
+    return url.includes('list=') || url.includes('playlist');
+  }
+
+  getPlaylistInfo(playlistId: string): Observable<ApiResponse<PlaylistInfo>> {
+    return this.http.post<ApiResponse<PlaylistInfo>>(`${this.apiUrl}/youtube/playlist/info`, {
+      playlistId
+    });
+  }
+
+  downloadPlaylist(
+    playlistId: string, 
+    quality: string, 
+    format: 'mp4' | 'mp3',
+    selectedVideoIds?: string[]
+  ): Observable<PlaylistDownloadResponse> {
+    return this.http.post<PlaylistDownloadResponse>(`${this.apiUrl}/youtube/playlist/download`, {
+      playlistId,
+      quality,
+      format,
+      selectedVideoIds
+    });
+  }
+
+  watchPlaylistProgress(playlistId: string): Observable<PlaylistDownloadProgress> {
+    const key = playlistId;
+    
+    if (!this.playlistProgressSubjects.has(key)) {
+      const subject = new Subject<PlaylistDownloadProgress>();
+      this.playlistProgressSubjects.set(key, subject);
+
+      const encodedPlaylistId = encodeURIComponent(playlistId);
+      
+      // Connect to SSE endpoint for playlist progress
+      const eventSource = new EventSource(
+        `${this.apiUrl}/youtube/playlist/progress/${encodedPlaylistId}`
+      );
+
+      eventSource.onopen = () => {
+        console.log('Playlist SSE connection opened');
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          subject.next(data);
+          console.log('Playlist progress update:', data);
+          
+          // Complete and cleanup when download finishes
+          if (data.status === 'completed' || data.status === 'failed') {
+            setTimeout(() => {
+              subject.complete();
+              eventSource.close();
+              this.playlistProgressSubjects.delete(key);
+            }, 1000);
+          }
+        } catch (error) {
+          console.error('Error parsing playlist SSE data:', error);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('Playlist SSE error:', error);
+        eventSource.close();
+        this.playlistProgressSubjects.delete(key);
+      };
+
+      // Cleanup after 30 minutes to prevent memory leaks
+      setTimeout(() => {
+        if (this.playlistProgressSubjects.has(key)) {
+          eventSource.close();
+          subject.complete();
+          this.playlistProgressSubjects.delete(key);
+        }
+      }, 1800000);
+    }
+
+    return this.playlistProgressSubjects.get(key)!.asObservable();
   }
 
   // Download History Methods

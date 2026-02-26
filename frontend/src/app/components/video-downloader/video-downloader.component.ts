@@ -2,7 +2,7 @@ import { Component, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { YoutubeService } from '../../services/youtube.service';
-import { VideoInfo, VideoFormat, DownloadHistoryItem } from '../../models/video.model';
+import { VideoInfo, VideoFormat, DownloadHistoryItem, PlaylistInfo, PlaylistVideo, PlaylistDownloadProgress } from '../../models/video.model';
 
 declare const particlesJS: any;
 
@@ -25,6 +25,14 @@ export class VideoDownloaderComponent implements AfterViewInit {
   downloadHistory: DownloadHistoryItem[] = [];
   historyLoading = false;
   historyTotal = 0;
+
+  // Playlist properties
+  isPlaylist = false;
+  playlistInfo: PlaylistInfo | null = null;
+  playlistDownloading = false;
+  playlistProgress: PlaylistDownloadProgress | null = null;
+  selectedPlaylistVideos = new Set<string>();
+  selectAllPlaylist = false;
 
   videoFormats: VideoFormat[] = [
     { quality: '1080p', label: 'Full HD (1080p)', format: 'mp4', ext: 'mp4', size: '~500MB' },
@@ -165,6 +173,12 @@ export class VideoDownloaderComponent implements AfterViewInit {
       return;
     }
 
+    // Check if it's a playlist URL
+    if (this.youtubeService.isPlaylistUrl(this.videoUrl)) {
+      this.fetchPlaylistInfo();
+      return;
+    }
+
     const videoId = this.youtubeService.extractVideoId(this.videoUrl);
     
     if (!videoId) {
@@ -172,11 +186,16 @@ export class VideoDownloaderComponent implements AfterViewInit {
       return;
     }
 
+    console.log('Fetching video info for:', videoId);
+    
     this.isLoading = true;
     this.videoInfo = null;
+    this.playlistInfo = null;
+    this.isPlaylist = false;
 
     this.youtubeService.getVideoInfo(videoId).subscribe({
       next: (response) => {
+        console.log('Video info response:', response);
         if (response.success && response.data) {
           this.videoInfo = response.data;
         } else {
@@ -185,8 +204,153 @@ export class VideoDownloaderComponent implements AfterViewInit {
         this.isLoading = false;
       },
       error: (error) => {
-        this.showError(error.error?.error || 'Failed to fetch video information');
+        console.error('Video info error:', error);
+        this.showError(error.error?.error || error.message || 'Failed to fetch video information');
         this.isLoading = false;
+      }
+    });
+  }
+
+  async fetchPlaylistInfo() {
+    const playlistId = this.youtubeService.extractPlaylistId(this.videoUrl);
+    
+    if (!playlistId) {
+      this.showError('Invalid YouTube Playlist URL.');
+      return;
+    }
+
+    console.log('Extracted playlist ID:', playlistId);
+
+    // Validate playlist type - reject Mix/Radio playlists
+    if (playlistId.startsWith('RDEM') || playlistId.startsWith('RDMM') || 
+        playlistId.startsWith('RDCLAK') || playlistId.startsWith('RDAO')) {
+      this.showError('YouTube Mix, Radio, and auto-generated playlists are not supported. Please use a regular user-created playlist (starts with PL or UU).');
+      return;
+    }
+
+    this.isLoading = true;
+    this.videoInfo = null;
+    this.playlistInfo = null;
+    this.isPlaylist = true;
+    this.selectedPlaylistVideos.clear();
+
+    this.youtubeService.getPlaylistInfo(playlistId).subscribe({
+      next: (response) => {
+        console.log('Playlist info response:', response);
+        if (response.success && response.data) {
+          this.playlistInfo = response.data;
+          // Select all videos by default
+          this.playlistInfo.videos.forEach(v => this.selectedPlaylistVideos.add(v.videoId));
+          this.selectAllPlaylist = true;
+        } else {
+          this.showError(response.error || 'Failed to fetch playlist information');
+          this.isPlaylist = false;
+        }
+        this.isLoading = false;
+      },
+      error: (error) => {
+        console.error('Playlist info error:', error);
+        const errorMsg = error.error?.error || error.error?.message || error.message || 'Failed to fetch playlist information';
+        this.showError(errorMsg);
+        this.isLoading = false;
+        this.isPlaylist = false;
+      }
+    });
+  }
+
+  togglePlaylistVideo(videoId: string) {
+    if (this.selectedPlaylistVideos.has(videoId)) {
+      this.selectedPlaylistVideos.delete(videoId);
+    } else {
+      this.selectedPlaylistVideos.add(videoId);
+    }
+    this.updateSelectAllState();
+  }
+
+  toggleSelectAll() {
+    if (!this.playlistInfo) return;
+    
+    if (this.selectAllPlaylist) {
+      this.selectedPlaylistVideos.clear();
+    } else {
+      this.playlistInfo.videos.forEach(v => this.selectedPlaylistVideos.add(v.videoId));
+    }
+    this.selectAllPlaylist = !this.selectAllPlaylist;
+  }
+
+  updateSelectAllState() {
+    if (!this.playlistInfo) return;
+    this.selectAllPlaylist = this.selectedPlaylistVideos.size === this.playlistInfo.videos.length;
+  }
+
+  downloadPlaylist(format: VideoFormat) {
+    if (!this.playlistInfo || this.selectedPlaylistVideos.size === 0) {
+      this.showError('Please select at least one video to download');
+      return;
+    }
+
+    this.playlistDownloading = true;
+    this.playlistProgress = null;
+
+    const selectedIds = Array.from(this.selectedPlaylistVideos);
+
+    // Start watching progress
+    this.youtubeService.watchPlaylistProgress(this.playlistInfo.playlistId).subscribe({
+      next: (progress) => {
+        this.playlistProgress = progress;
+      },
+      error: (error) => {
+        console.error('Progress error:', error);
+      }
+    });
+
+    // Start download
+    this.youtubeService.downloadPlaylist(
+      this.playlistInfo.playlistId,
+      format.quality,
+      format.format as 'mp4' | 'mp3',
+      selectedIds
+    ).subscribe({
+      next: (response) => {
+        this.playlistDownloading = false;
+        
+        if (response.success) {
+          this.showSuccess(`Playlist download completed! ${response.downloadedVideos}/${response.totalVideos} videos downloaded`);
+          
+          if (response.failedVideos.length > 0) {
+            console.warn('Failed videos:', response.failedVideos);
+          }
+          
+          // Trigger download for each file
+          if (response.downloadUrls && response.downloadUrls.length > 0) {
+            response.downloadUrls.forEach((downloadUrl, index) => {
+              const filename = response.filenames && response.filenames[index] 
+                ? response.filenames[index] 
+                : `video-${index + 1}.${format.format}`;
+              
+              // Trigger download with delay to avoid browser blocking multiple downloads
+              setTimeout(() => {
+                const link = document.createElement('a');
+                link.href = `http://localhost:3000${downloadUrl}`;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                console.log(`Triggering download ${index + 1}/${response?.downloadUrls?.length}: ${filename}`);
+              }, index * 2000); // 2 second delay between each download
+            });
+          }
+          
+          // Reload history
+          this.loadHistory();
+        } else {
+          this.showError(response.error || 'Playlist download failed');
+        }
+      },
+      error: (error) => {
+        this.playlistDownloading = false;
+        this.showError(error.error?.error || 'Failed to download playlist');
       }
     });
   }
@@ -373,5 +537,9 @@ export class VideoDownloaderComponent implements AfterViewInit {
     if (diffDays < 30) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
     
     return downloadDate.toLocaleDateString();
+  }
+
+  formatPlaylistVideoDuration(seconds: number): string {
+    return this.youtubeService.formatDuration(seconds);
   }
 }

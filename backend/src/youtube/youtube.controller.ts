@@ -18,6 +18,7 @@ import { Observable } from 'rxjs';
 import { YoutubeService } from './youtube.service';
 import { VideoInfoDto, DownloadVideoDto } from './dto/video-info.dto';
 import { GetHistoryDto } from './dto/download-history.dto';
+import { PlaylistInfoDto, DownloadPlaylistDto } from './dto/playlist.dto';
 
 @Controller('youtube')
 export class YoutubeController {
@@ -26,6 +27,12 @@ export class YoutubeController {
   @Post('info')
   async getVideoInfo(@Body() videoInfoDto: VideoInfoDto) {
     try {
+      console.log('Received video info request:', videoInfoDto);
+      
+      if (!videoInfoDto.videoId) {
+        throw new Error('Video ID is required');
+      }
+      
       const info = await this.youtubeService.getVideoInfo(
         videoInfoDto.videoId,
       );
@@ -34,6 +41,7 @@ export class YoutubeController {
         data: info,
       };
     } catch (error) {
+      console.error('Video info error:', error.message);
       throw new HttpException(
         {
           success: false,
@@ -139,6 +147,77 @@ export class YoutubeController {
         HttpStatus.NOT_FOUND,
       );
     }
+  }
+
+  // Playlist Endpoints
+  @Post('playlist/info')
+  async getPlaylistInfo(@Body() playlistInfoDto: PlaylistInfoDto) {
+    try {
+      console.log('Received playlist info request:', playlistInfoDto);
+      
+      if (!playlistInfoDto.playlistId) {
+        throw new Error('Playlist ID is required');
+      }
+      
+      const info = await this.youtubeService.getPlaylistInfo(
+        playlistInfoDto.playlistId,
+      );
+      return {
+        success: true,
+        data: info,
+      };
+    } catch (error) {
+      console.error('Playlist info error:', error.message);
+      throw new HttpException(
+        {
+          success: false,
+          error: error.message || 'Failed to fetch playlist information',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  @Post('playlist/download')
+  async downloadPlaylist(@Body() downloadDto: DownloadPlaylistDto) {
+    try {
+      const result = await this.youtubeService.downloadPlaylist(
+        downloadDto.playlistId,
+        downloadDto.quality,
+        downloadDto.format,
+        downloadDto.selectedVideoIds,
+      );
+      return result;
+    } catch (error) {
+      throw new HttpException(
+        {
+          success: false,
+          error: error.message || 'Failed to download playlist',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Sse('playlist/progress/:playlistId')
+  playlistProgress(@Param('playlistId') playlistId: string): Observable<MessageEvent> {
+    return new Observable((observer) => {
+      const progressHandler = (data: any) => {
+        if (data.playlistId === playlistId) {
+          observer.next({ data } as MessageEvent);
+          
+          if (data.status === 'completed' || data.status === 'failed') {
+            observer.complete();
+          }
+        }
+      };
+
+      this.youtubeService.on('playlist-progress', progressHandler);
+
+      return () => {
+        this.youtubeService.off('playlist-progress', progressHandler);
+      };
+    });
   }
 
   // Download History Endpoints
