@@ -2,6 +2,7 @@ import { Component, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { YoutubeService } from '../../services/youtube.service';
+import { SeoService } from '../../services/seo.service';
 import { VideoInfo, VideoFormat, DownloadHistoryItem, PlaylistInfo, PlaylistVideo, PlaylistDownloadProgress } from '../../models/video.model';
 
 declare const particlesJS: any;
@@ -52,7 +53,14 @@ export class VideoDownloaderComponent implements AfterViewInit {
   downloadingFormats = new Set<string>();
   downloadProgress = new Map<string, number>();
 
-  constructor(private youtubeService: YoutubeService) {}
+  constructor(
+    private youtubeService: YoutubeService,
+    private seoService: SeoService
+  ) {
+    // Set SEO meta tags
+    this.seoService.setDefaultTags();
+    this.seoService.addWebApplicationSchema();
+  }
 
   ngAfterViewInit() {
     // Load history on component init
