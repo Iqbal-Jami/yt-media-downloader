@@ -46,41 +46,170 @@ export class YoutubeService extends EventEmitter {
         throw new Error('Invalid YouTube URL');
       }
 
-      const info = await ytdl.getInfo(url);
-      const videoDetails = info.videoDetails;
+      // Try ytdl-core first with agent and headers
+      try {
+        const agent = ytdl.createAgent();
+        const info = await ytdl.getInfo(url, {
+          agent,
+          requestOptions: {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            }
+          }
+        });
+        const videoDetails = info.videoDetails;
 
-      return {
-        videoId,
-        title: videoDetails.title,
-        author: videoDetails.author.name,
-        thumbnail: videoDetails.thumbnails[videoDetails.thumbnails.length - 1].url,
-        duration: parseInt(videoDetails.lengthSeconds),
-        description: videoDetails.description,
-        uploadDate: videoDetails.uploadDate,
-      };
+        return {
+          videoId,
+          title: videoDetails.title,
+          author: videoDetails.author.name,
+          thumbnail: videoDetails.thumbnails[videoDetails.thumbnails.length - 1].url,
+          duration: parseInt(videoDetails.lengthSeconds),
+          description: videoDetails.description,
+          uploadDate: videoDetails.uploadDate,
+        };
+      } catch (ytdlError) {
+        // If ytdl-core fails (bot detection), fallback to yt-dlp
+        this.logger.warn(`ytdl-core failed, using yt-dlp fallback: ${ytdlError.message}`);
+        return await this.getVideoInfoViaYtDlp(url);
+      }
     } catch (error) {
       this.logger.error(`Error fetching video info: ${error.message}`);
       throw new Error(`Failed to fetch video information: ${error.message}`);
     }
   }
 
+  // Fallback method using yt-dlp to get video info
+  private async getVideoInfoViaYtDlp(url: string): Promise<VideoInfo> {
+    return new Promise((resolve, reject) => {
+      const ytdlpPath = path.join(process.cwd(), 'yt-dlp.exe');
+      
+      if (!fs.existsSync(ytdlpPath)) {
+        reject(new Error('yt-dlp.exe not found. Please download it to the backend directory.'));
+        return;
+      }
+
+      // Try with browser cookies first (Chrome), fallback to no cookies
+      const args = [
+        '--dump-json', 
+        '--no-playlist',
+        '--cookies-from-browser', 'chrome', // Extract cookies from Chrome
+        url
+      ];
+      
+      this.logger.log(`Executing yt-dlp with browser cookies...`);
+      const child = spawn(ytdlpPath, args, { shell: false });
+
+      let jsonOutput = '';
+      let errorOutput = '';
+
+      child.stdout.on('data', (data) => {
+        jsonOutput += data.toString();
+      });
+
+      child.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      child.on('close', (code) => {
+        if (code === 0 && jsonOutput) {
+          try {
+            const videoData = JSON.parse(jsonOutput);
+            const videoId = videoData.id || url.split('v=')[1]?.split('&')[0];
+            
+            resolve({
+              videoId,
+              title: videoData.title || 'Unknown Title',
+              author: videoData.uploader || videoData.channel || 'Unknown Author',
+              thumbnail: videoData.thumbnail || videoData.thumbnails?.[0]?.url || '',
+              duration: videoData.duration || 0,
+              description: videoData.description || '',
+              uploadDate: videoData.upload_date || new Date().toISOString().split('T')[0],
+            });
+          } catch (parseError) {
+            reject(new Error(`Failed to parse yt-dlp output: ${parseError.message}`));
+          }
+        } else {
+          // If Chrome cookies fail, try without cookies as last resort
+          this.logger.warn(`yt-dlp with cookies failed, trying without cookies...`);
+          this.getVideoInfoViaYtDlpNoCookies(url).then(resolve).catch(reject);
+        }
+      });
+
+      child.on('error', (error) => {
+        reject(new Error(`Failed to execute yt-dlp: ${error.message}`));
+      });
+    });
+  }
+
+  // Last resort: yt-dlp without cookies (likely to fail on some videos)
+  private async getVideoInfoViaYtDlpNoCookies(url: string): Promise<VideoInfo> {
+    return new Promise((resolve, reject) => {
+      const ytdlpPath = path.join(process.cwd(), 'yt-dlp.exe');
+      const args = ['--dump-json', '--no-playlist', url];
+      
+      const child = spawn(ytdlpPath, args, { shell: false });
+
+      let jsonOutput = '';
+      let errorOutput = '';
+
+      child.stdout.on('data', (data) => {
+        jsonOutput += data.toString();
+      });
+
+      child.stderr.on('data', (data) => {
+        errorOutput += data.toString();
+      });
+
+      child.on('close', (code) => {
+        if (code === 0 && jsonOutput) {
+          try {
+            const videoData = JSON.parse(jsonOutput);
+            const videoId = videoData.id || url.split('v=')[1]?.split('&')[0];
+            
+            resolve({
+              videoId,
+              title: videoData.title || 'Unknown Title',
+              author: videoData.uploader || videoData.channel || 'Unknown Author',
+              thumbnail: videoData.thumbnail || videoData.thumbnails?.[0]?.url || '',
+              duration: videoData.duration || 0,
+              description: videoData.description || '',
+              uploadDate: videoData.upload_date || new Date().toISOString().split('T')[0],
+            });
+          } catch (parseError) {
+            reject(new Error(`Failed to parse yt-dlp output: ${parseError.message}`));
+          }
+        } else {
+          reject(new Error(`yt-dlp failed with code ${code}: ${errorOutput}`));
+        }
+      });
+
+      child.on('error', (error) => {
+        reject(new Error(`Failed to execute yt-dlp: ${error.message}`));
+      });
+    });
+  }
+
   // Helper method to execute yt-dlp with proper path handling for spaces
   private async executeYtdlp(url: string, args: string[], downloadKey?: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const ytdlpPath = path.join(
-        __dirname,
-        '..',
-        '..',
-        'node_modules',
-        'youtube-dl-exec',
-        'bin',
-        'yt-dlp.exe'
-      );
+      // Use yt-dlp.exe from project root
+      const ytdlpPath = path.join(process.cwd(), 'yt-dlp.exe');
+
+      if (!fs.existsSync(ytdlpPath)) {
+        reject(new Error('yt-dlp.exe not found in project root'));
+        return;
+      }
+
+      // Add browser cookies support to args
+      const argsWithCookies = ['--cookies-from-browser', 'chrome', ...args];
 
       this.logger.log(`Executing yt-dlp at: ${ytdlpPath}`);
-      this.logger.log(`Args: ${JSON.stringify(args)}`);
+      this.logger.log(`Args: ${JSON.stringify(argsWithCookies)}`);
 
-      const child = spawn(ytdlpPath, [url, ...args], {
+      const child = spawn(ytdlpPath, [url, ...argsWithCookies], {
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       });
@@ -193,8 +322,17 @@ export class YoutubeService extends EventEmitter {
         progress: 0
       });
 
-      // Get video info for title
-      const info = await ytdl.getInfo(url);
+      // Get video info for title with agent
+      const agent = ytdl.createAgent();
+      const info = await ytdl.getInfo(url, {
+        agent,
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+          }
+        }
+      });
       const title = info.videoDetails.title.replace(/[^\w\s-]/gi, '_');
       
       // Use the requested format directly (FFmpeg will handle MP3 conversion)
@@ -278,8 +416,16 @@ export class YoutubeService extends EventEmitter {
         throw new Error('Invalid YouTube URL');
       }
 
+      const agent = ytdl.createAgent();
       return ytdl(url, { 
-        quality: 'highest'
+        quality: 'highestvideo',
+        agent,
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+          }
+        }
       });
     } catch (error) {
       this.logger.error(`Error streaming video: ${error.message}`);

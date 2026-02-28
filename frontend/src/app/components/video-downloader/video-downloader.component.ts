@@ -1,4 +1,4 @@
-import { Component, AfterViewInit } from '@angular/core';
+import { Component, AfterViewInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { YoutubeService } from '../../services/youtube.service';
@@ -55,7 +55,8 @@ export class VideoDownloaderComponent implements AfterViewInit {
 
   constructor(
     private youtubeService: YoutubeService,
-    private seoService: SeoService
+    private seoService: SeoService,
+    private cdr: ChangeDetectorRef
   ) {
     // Set SEO meta tags
     this.seoService.setDefaultTags();
@@ -63,8 +64,10 @@ export class VideoDownloaderComponent implements AfterViewInit {
   }
 
   ngAfterViewInit() {
-    // Load history on component init
-    this.loadHistory();
+    // Load history on component init - defer to avoid ExpressionChangedAfterItHasBeenCheckedError
+    setTimeout(() => {
+      this.loadHistory();
+    });
     
     // Initialize particles.js for cyber effect
     if (typeof particlesJS !== 'undefined') {
@@ -210,11 +213,13 @@ export class VideoDownloaderComponent implements AfterViewInit {
           this.showError(response.error || 'Failed to fetch video information');
         }
         this.isLoading = false;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Video info error:', error);
         this.showError(error.error?.error || error.message || 'Failed to fetch video information');
         this.isLoading = false;
+        this.cdr.detectChanges();
       }
     });
   }
@@ -255,6 +260,7 @@ export class VideoDownloaderComponent implements AfterViewInit {
           this.isPlaylist = false;
         }
         this.isLoading = false;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Playlist info error:', error);
@@ -262,6 +268,7 @@ export class VideoDownloaderComponent implements AfterViewInit {
         this.showError(errorMsg);
         this.isLoading = false;
         this.isPlaylist = false;
+        this.cdr.detectChanges();
       }
     });
   }
@@ -306,6 +313,7 @@ export class VideoDownloaderComponent implements AfterViewInit {
     this.youtubeService.watchPlaylistProgress(this.playlistInfo.playlistId).subscribe({
       next: (progress) => {
         this.playlistProgress = progress;
+        this.cdr.detectChanges();
       },
       error: (error) => {
         console.error('Progress error:', error);
@@ -321,6 +329,7 @@ export class VideoDownloaderComponent implements AfterViewInit {
     ).subscribe({
       next: (response) => {
         this.playlistDownloading = false;
+        this.cdr.detectChanges();
         
         if (response.success) {
           this.showSuccess(`Playlist download completed! ${response.downloadedVideos}/${response.totalVideos} videos downloaded`);
@@ -359,6 +368,7 @@ export class VideoDownloaderComponent implements AfterViewInit {
       error: (error) => {
         this.playlistDownloading = false;
         this.showError(error.error?.error || 'Failed to download playlist');
+        this.cdr.detectChanges();
       }
     });
   }
@@ -375,7 +385,10 @@ export class VideoDownloaderComponent implements AfterViewInit {
       const currentProgress = this.downloadProgress.get(downloadKey) || 0;
       if (currentProgress < 90 && this.downloadingFormats.has(downloadKey)) {
         // Slow incremental progress as fallback
-        this.downloadProgress.set(downloadKey, Math.min(currentProgress + Math.random() * 5, 90));
+        setTimeout(() => {
+          this.downloadProgress.set(downloadKey, Math.min(currentProgress + Math.random() * 5, 90));
+          this.cdr.markForCheck();
+        });
       }
     }, 2000);
 
@@ -387,7 +400,10 @@ export class VideoDownloaderComponent implements AfterViewInit {
     ).subscribe({
       next: (progress) => {
         // Real progress from server overrides simulated progress
-        this.downloadProgress.set(downloadKey, progress);
+        setTimeout(() => {
+          this.downloadProgress.set(downloadKey, progress);
+          this.cdr.markForCheck();
+        });
       },
       error: (error) => {
         console.error('Progress tracking error:', error);
@@ -405,6 +421,7 @@ export class VideoDownloaderComponent implements AfterViewInit {
         progressSub.unsubscribe();
         this.downloadingFormats.delete(downloadKey);
         this.downloadProgress.delete(downloadKey);
+        this.cdr.detectChanges();
         
         if (response.success && response.downloadUrl) {
           // Trigger download
@@ -427,6 +444,7 @@ export class VideoDownloaderComponent implements AfterViewInit {
         this.downloadingFormats.delete(downloadKey);
         this.downloadProgress.delete(downloadKey);
         this.showError(error.error?.error || 'Download failed. Make sure the backend server is running.');
+        this.cdr.detectChanges();
       }
     });
   }
@@ -452,8 +470,10 @@ export class VideoDownloaderComponent implements AfterViewInit {
 
   private showError(message: string) {
     this.errorMessage = message;
+    this.cdr.detectChanges();
     setTimeout(() => {
       this.errorMessage = '';
+      this.cdr.detectChanges();
     }, 5000);
   }
 
@@ -467,15 +487,22 @@ export class VideoDownloaderComponent implements AfterViewInit {
     this.historyLoading = true;
     this.youtubeService.getHistory(50, 0).subscribe({
       next: (response) => {
-        if (response.success && response.data) {
-          this.downloadHistory = response.data;
-          this.historyTotal = response.total;
-        }
-        this.historyLoading = false;
+        // Wrap in setTimeout to avoid ExpressionChangedAfterItHasBeenCheckedError
+        setTimeout(() => {
+          if (response.success && response.data) {
+            this.downloadHistory = response.data;
+            this.historyTotal = response.total;
+          }
+          this.historyLoading = false;
+          this.cdr.markForCheck();
+        });
       },
       error: (error) => {
         console.error('Failed to load history:', error);
-        this.historyLoading = false;
+        setTimeout(() => {
+          this.historyLoading = false;
+          this.cdr.markForCheck();
+        });
       }
     });
   }
@@ -513,9 +540,11 @@ export class VideoDownloaderComponent implements AfterViewInit {
         this.downloadHistory = [];
         this.historyTotal = 0;
         this.showSuccess('History cleared');
+        this.cdr.detectChanges();
       },
       error: (error) => {
         this.showError('Failed to clear history');
+        this.cdr.detectChanges();
       }
     });
   }

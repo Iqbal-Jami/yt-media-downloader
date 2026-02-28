@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { YoutubeModule } from './youtube/youtube.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -10,5 +11,6 @@ import { YoutubeModule } from './youtube/youtube.module';
     }),
     YoutubeModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}

@@ -44,9 +44,9 @@ export class SeoService {
     ];
 
     tags.forEach(tag => {
-      if ('name' in tag) {
-        this.meta.updateTag(tag);
-      } else {
+      if ('name' in tag && tag.name) {
+        this.meta.updateTag({ name: tag.name, content: tag.content });
+      } else if ('property' in tag && tag.property) {
         this.meta.updateTag({ property: tag.property, content: tag.content });
       }
     });
