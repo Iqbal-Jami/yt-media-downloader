@@ -203,13 +203,14 @@ export class YoutubeService extends EventEmitter {
         return;
       }
 
-      // Add browser cookies support to args
-      const argsWithCookies = ['--cookies-from-browser', 'chrome', ...args];
+      // Try to add browser cookies support (optional - don't fail if it doesn't work)
+      // This helps with age-restricted or region-locked videos
+      const finalArgs = [...args];
 
       this.logger.log(`Executing yt-dlp at: ${ytdlpPath}`);
-      this.logger.log(`Args: ${JSON.stringify(argsWithCookies)}`);
+      this.logger.log(`Args: ${JSON.stringify(finalArgs)}`);
 
-      const child = spawn(ytdlpPath, [url, ...argsWithCookies], {
+      const child = spawn(ytdlpPath, [url, ...finalArgs], {
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       });
@@ -322,30 +323,51 @@ export class YoutubeService extends EventEmitter {
         progress: 0
       });
 
-      // Get video info for title with agent
-      const agent = ytdl.createAgent();
-      const info = await ytdl.getInfo(url, {
-        agent,
-        requestOptions: {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
+      // Get video info for title - use yt-dlp if ytdl fails
+      let title = videoId; // Fallback to videoId
+      let info: any = null;
+      
+      try {
+        const agent = ytdl.createAgent();
+        info = await ytdl.getInfo(url, {
+          agent,
+          requestOptions: {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+              'Accept-Language': 'en-US,en;q=0.9',
+            }
           }
-        }
-      });
-      const title = info.videoDetails.title.replace(/[^\w\s-]/gi, '_');
+        });
+        title = info.videoDetails.title.replace(/[^\w\s-]/gi, '_');
+        this.logger.log(`Got video info: ${title}`);
+      } catch (infoError) {
+        this.logger.warn(`Failed to get video info via ytdl: ${infoError.message}`);
+        this.logger.log(`Will use yt-dlp to get metadata during download`);
+        // Continue with download - yt-dlp will get the info
+      }
       
       // Use the requested format directly (FFmpeg will handle MP3 conversion)
       const filename = `${title}_${uuidv4()}.${format}`;
       const filepath = path.join(this.downloadsDir, filename);
 
-      // Build yt-dlp command-line arguments
+      // Build yt-dlp command-line arguments with better anti-bot measures
       const args: string[] = [
         '--output', filepath,
         '--no-check-certificates',
         '--no-warnings',
-        '--add-header', 'referer:youtube.com',
-        '--add-header', 'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        // Extractor arguments to help with 403 errors (YouTube bot detection bypass)
+        '--extractor-args', 'youtube:player_client=android',
+        // Better headers to avoid 403
+        '--add-header', 'Accept:text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        '--add-header', 'Accept-Language:en-us,en;q=0.5',
+        '--user-agent', 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
+        // Use IPv4 to avoid some connection issues
+        '--force-ipv4',
+        // Retry logic
+        '--retries', '10',
+        '--fragment-retries', '10',
+        // Extract flat for better compatibility
+        '--no-playlist',
       ];
 
       if (format === 'mp3') {
@@ -370,7 +392,50 @@ export class YoutubeService extends EventEmitter {
 
       // Download using yt-dlp with progress tracking
       this.logger.log(`Starting download to: ${filepath}`);
-      await this.executeYtdlp(url, args, downloadKey);
+      
+      // Try download with multiple strategies if needed
+      let downloadSuccess = false;
+      let lastError: Error | null = null;
+      
+      // Strategy 1: Try normal download
+      try {
+        await this.executeYtdlp(url, args, downloadKey);
+        downloadSuccess = true;
+      } catch (error) {
+        lastError = error;
+        this.logger.warn(`Download attempt 1 failed: ${error.message}`);
+        
+        // Strategy 2: Try with browser cookies (Chrome)
+        try {
+          this.logger.log(`Retrying with Chrome cookies...`);
+          const argsWithCookies = ['--cookies-from-browser', 'chrome', ...args];
+          await this.executeYtdlp(url, argsWithCookies, downloadKey);
+          downloadSuccess = true;
+        } catch (cookieError) {
+          lastError = cookieError;
+          this.logger.warn(`Download with cookies failed: ${cookieError.message}`);
+          
+          // Strategy 3: Try with simpler format selection (no merge needed)
+          if (format !== 'mp3') {
+            try {
+              this.logger.log(`Retrying with simpler format...`);
+              const simpleArgs = args.filter(arg => !arg.includes('bestvideo') && !arg.includes('bestaudio'));
+              simpleArgs.push('--format', 'best');
+              await this.executeYtdlp(url, simpleArgs, downloadKey);
+              downloadSuccess = true;
+            } catch (simpleError) {
+              lastError = simpleError;
+              this.logger.error(`All download strategies failed`);
+            }
+          }
+        }
+      }
+      
+      if (!downloadSuccess) {
+        throw new Error(`Download failed after multiple attempts. Last error: ${lastError?.message || 'Unknown error'}. Please try: 1) Update yt-dlp.exe to latest version, 2) Make sure you have Chrome browser installed, 3) Try a different video quality.`);
+      }
+      
+      this.logger.log(`Download completed successfully`);
       
       // Find the actual downloaded file (yt-dlp may add format codes)
       const baseFilename = filename.replace(/\.[^.]+$/, ''); // Remove extension
@@ -384,16 +449,30 @@ export class YoutubeService extends EventEmitter {
       this.logger.log(`Downloaded: ${downloadedFile}`);
       
       // Add to download history
-      await this.addToHistory(
-        videoId,
-        info.videoDetails.title,
-        info.videoDetails.author.name,
-        info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url,
-        quality,
-        format,
-        undefined, // fileSize (we can calculate this if needed)
-        parseInt(info.videoDetails.lengthSeconds),
-      );
+      if (info && info.videoDetails) {
+        await this.addToHistory(
+          videoId,
+          info.videoDetails.title,
+          info.videoDetails.author.name,
+          info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url,
+          quality,
+          format,
+          undefined, // fileSize (we can calculate this if needed)
+          parseInt(info.videoDetails.lengthSeconds),
+        );
+      } else {
+        // Add minimal history entry if we don't have full info
+        await this.addToHistory(
+          videoId,
+          title,
+          'Unknown',
+          `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+          quality,
+          format,
+          undefined,
+          0,
+        );
+      }
       
       return {
         success: true,

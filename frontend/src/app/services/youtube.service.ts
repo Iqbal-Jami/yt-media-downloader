@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, Subject } from 'rxjs';
+import { shareReplay, map } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { VideoInfo, DownloadResponse, ApiResponse, HistoryResponse, DownloadHistoryItem, PlaylistInfo, PlaylistDownloadResponse, PlaylistDownloadProgress } from '../models/video.model';
 
@@ -18,13 +19,25 @@ export class YoutubeService {
   private apiUrl = environment.apiUrl;
   private progressSubjects = new Map<string, Subject<number>>();
   private playlistProgressSubjects = new Map<string, Subject<PlaylistDownloadProgress>>();
+  private videoInfoCache = new Map<string, Observable<ApiResponse<VideoInfo>>>();
+  private playlistInfoCache = new Map<string, Observable<ApiResponse<PlaylistInfo>>>();
 
   constructor(private http: HttpClient) { }
 
   getVideoInfo(videoId: string): Observable<ApiResponse<VideoInfo>> {
-    return this.http.post<ApiResponse<VideoInfo>>(`${this.apiUrl}/youtube/info`, {
-      videoId
-    });
+    // Check cache first for instant response
+    if (!this.videoInfoCache.has(videoId)) {
+      const request$ = this.http.post<ApiResponse<VideoInfo>>(`${this.apiUrl}/youtube/info`, {
+        videoId
+      }).pipe(
+        shareReplay({ bufferSize: 1, refCount: true })
+      );
+      this.videoInfoCache.set(videoId, request$);
+      
+      // Clear cache after 5 minutes
+      setTimeout(() => this.videoInfoCache.delete(videoId), 300000);
+    }
+    return this.videoInfoCache.get(videoId)!;
   }
 
   downloadVideo(videoId: string, quality: string, format: 'mp4' | 'mp3'): Observable<DownloadResponse> {
@@ -53,7 +66,6 @@ export class YoutubeService {
       );
 
       eventSource.onopen = () => {
-        console.log('SSE connection opened');
         subject.next(0);
       };
 
@@ -62,7 +74,6 @@ export class YoutubeService {
           const data = JSON.parse(event.data);
           if (data.progress !== undefined) {
             subject.next(data.progress);
-            console.log('Progress update:', data.progress);
             
             // Complete and cleanup when download finishes
             if (data.progress >= 100) {
@@ -78,8 +89,8 @@ export class YoutubeService {
         }
       };
 
-      eventSource.onerror = (error) => {
-        console.error('SSE error:', error);
+      eventSource.onerror = () => {
+        // SSE connection closed (normal when download completes)
         eventSource.close();
         // Don't complete on error immediately, keep the subject open for manual updates
         this.progressSubjects.delete(key);
@@ -141,9 +152,19 @@ export class YoutubeService {
   }
 
   getPlaylistInfo(playlistId: string): Observable<ApiResponse<PlaylistInfo>> {
-    return this.http.post<ApiResponse<PlaylistInfo>>(`${this.apiUrl}/youtube/playlist/info`, {
-      playlistId
-    });
+    // Check cache first for instant response
+    if (!this.playlistInfoCache.has(playlistId)) {
+      const request$ = this.http.post<ApiResponse<PlaylistInfo>>(`${this.apiUrl}/youtube/playlist/info`, {
+        playlistId
+      }).pipe(
+        shareReplay({ bufferSize: 1, refCount: true })
+      );
+      this.playlistInfoCache.set(playlistId, request$);
+      
+      // Clear cache after 5 minutes
+      setTimeout(() => this.playlistInfoCache.delete(playlistId), 300000);
+    }
+    return this.playlistInfoCache.get(playlistId)!;
   }
 
   downloadPlaylist(
@@ -175,14 +196,13 @@ export class YoutubeService {
       );
 
       eventSource.onopen = () => {
-        console.log('Playlist SSE connection opened');
+        // Connection opened
       };
 
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           subject.next(data);
-          console.log('Playlist progress update:', data);
           
           // Complete and cleanup when download finishes
           if (data.status === 'completed' || data.status === 'failed') {
@@ -197,8 +217,8 @@ export class YoutubeService {
         }
       };
 
-      eventSource.onerror = (error) => {
-        console.error('Playlist SSE error:', error);
+      eventSource.onerror = () => {
+        // SSE connection closed (normal when playlist download completes)
         eventSource.close();
         this.playlistProgressSubjects.delete(key);
       };

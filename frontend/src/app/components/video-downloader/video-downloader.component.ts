@@ -1,9 +1,10 @@
-import { Component, AfterViewInit, ChangeDetectorRef } from '@angular/core';
+import { Component, AfterViewInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { YoutubeService } from '../../services/youtube.service';
 import { SeoService } from '../../services/seo.service';
 import { VideoInfo, VideoFormat, DownloadHistoryItem, PlaylistInfo, PlaylistVideo, PlaylistDownloadProgress } from '../../models/video.model';
+import { environment } from '../../../environments/environment';
 
 declare const particlesJS: any;
 
@@ -12,7 +13,8 @@ declare const particlesJS: any;
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './video-downloader.component.html',
-  styleUrls: ['./video-downloader.component.scss']
+  styleUrls: ['./video-downloader.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VideoDownloaderComponent implements AfterViewInit {
   videoUrl = '';
@@ -69,9 +71,16 @@ export class VideoDownloaderComponent implements AfterViewInit {
       this.loadHistory();
     });
     
-    // Initialize particles.js for cyber effect
-    if (typeof particlesJS !== 'undefined') {
-      particlesJS('particles-js', {
+    // Initialize particles.js asynchronously for better performance
+    requestAnimationFrame(() => {
+      this.initParticles();
+    });
+  }
+
+  private initParticles() {
+    if (typeof particlesJS === 'undefined') return;
+    
+    particlesJS('particles-js', {
         particles: {
           number: {
             value: 80,
@@ -173,7 +182,6 @@ export class VideoDownloaderComponent implements AfterViewInit {
         },
         retina_detect: true
       });
-    }
   }
 
   async fetchVideoInfo() {
@@ -197,8 +205,6 @@ export class VideoDownloaderComponent implements AfterViewInit {
       return;
     }
 
-    console.log('Fetching video info for:', videoId);
-    
     this.isLoading = true;
     this.videoInfo = null;
     this.playlistInfo = null;
@@ -206,7 +212,6 @@ export class VideoDownloaderComponent implements AfterViewInit {
 
     this.youtubeService.getVideoInfo(videoId).subscribe({
       next: (response) => {
-        console.log('Video info response:', response);
         if (response.success && response.data) {
           this.videoInfo = response.data;
         } else {
@@ -216,7 +221,6 @@ export class VideoDownloaderComponent implements AfterViewInit {
         this.cdr.detectChanges();
       },
       error: (error) => {
-        console.error('Video info error:', error);
         this.showError(error.error?.error || error.message || 'Failed to fetch video information');
         this.isLoading = false;
         this.cdr.detectChanges();
@@ -231,8 +235,6 @@ export class VideoDownloaderComponent implements AfterViewInit {
       this.showError('Invalid YouTube Playlist URL.');
       return;
     }
-
-    console.log('Extracted playlist ID:', playlistId);
 
     // Validate playlist type - reject Mix/Radio playlists
     if (playlistId.startsWith('RDEM') || playlistId.startsWith('RDMM') || 
@@ -249,7 +251,6 @@ export class VideoDownloaderComponent implements AfterViewInit {
 
     this.youtubeService.getPlaylistInfo(playlistId).subscribe({
       next: (response) => {
-        console.log('Playlist info response:', response);
         if (response.success && response.data) {
           this.playlistInfo = response.data;
           // Select all videos by default
@@ -263,7 +264,6 @@ export class VideoDownloaderComponent implements AfterViewInit {
         this.cdr.detectChanges();
       },
       error: (error) => {
-        console.error('Playlist info error:', error);
         const errorMsg = error.error?.error || error.error?.message || error.message || 'Failed to fetch playlist information';
         this.showError(errorMsg);
         this.isLoading = false;
@@ -353,8 +353,6 @@ export class VideoDownloaderComponent implements AfterViewInit {
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-                
-                console.log(`Triggering download ${index + 1}/${response?.downloadUrls?.length}: ${filename}`);
               }, index * 2000); // 2 second delay between each download
             });
           }
@@ -479,7 +477,10 @@ export class VideoDownloaderComponent implements AfterViewInit {
 
   private showSuccess(message: string) {
     // You could implement a toast notification service here
-    console.log('Success:', message);
+    // Only log in development mode
+    if (!environment.production) {
+      console.log('Success:', message);
+    }
   }
 
   // History Methods
@@ -578,5 +579,18 @@ export class VideoDownloaderComponent implements AfterViewInit {
 
   formatPlaylistVideoDuration(seconds: number): string {
     return this.youtubeService.formatDuration(seconds);
+  }
+
+  // TrackBy functions for better performance with ngFor
+  trackByVideoId(index: number, item: PlaylistVideo): string {
+    return item.videoId;
+  }
+
+  trackByHistoryId(index: number, item: DownloadHistoryItem): string {
+    return item.id;
+  }
+
+  trackByFormatQuality(index: number, format: VideoFormat): string {
+    return `${format.quality}-${format.format}`;
   }
 }

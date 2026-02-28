@@ -185,7 +185,7 @@
       <div class="format-grid">
         <!-- Video Formats -->
         <div *ngIf="activeTab === 'video'" class="format-container">
-          <div *ngFor="let format of videoFormats; let i = index" 
+          <div *ngFor="let format of videoFormats; let i = index; trackBy: trackByFormatQuality" 
                class="format-card"
                [style.animation-delay]="i * 0.1 + 's'">
             <div class="card-glow"></div>
@@ -212,7 +212,7 @@
 
         <!-- Audio Formats -->
         <div *ngIf="activeTab === 'audio'" class="format-container">
-          <div *ngFor="let format of audioFormats; let i = index" 
+          <div *ngFor="let format of audioFormats; let i = index; trackBy: trackByFormatQuality" 
                class="format-card"
                [style.animation-delay]="i * 0.1 + 's'">
             <div class="card-glow"></div>
@@ -305,7 +305,7 @@
 
       <div class="videos-list">
         <div 
-          *ngFor="let video of playlistInfo.videos; let i = index" 
+          *ngFor="let video of playlistInfo.videos; let i = index; trackBy: trackByVideoId" 
           class="playlist-video-item"
           [class.selected]="selectedPlaylistVideos.has(video.videoId)"
         >
@@ -319,7 +319,7 @@
           </label>
           
           <div class="video-thumbnail">
-            <img [src]="video.thumbnail" [alt]="video.title">
+            <img [src]="video.thumbnail" [alt]="video.title" loading="lazy">
             <span class="video-index">{{ video.index }}</span>
           </div>
           
@@ -376,7 +376,7 @@
       <div class="format-grid">
         <!-- Video Formats -->
         <div *ngIf="activeTab === 'video'" class="format-container">
-          <div *ngFor="let format of videoFormats; let i = index" 
+          <div *ngFor="let format of videoFormats; let i = index; trackBy: trackByFormatQuality" 
                class="format-card"
                [style.animation-delay]="i * 0.1 + 's'">
             <div class="card-glow"></div>
@@ -403,7 +403,7 @@
 
         <!-- Audio Formats -->
         <div *ngIf="activeTab === 'audio'" class="format-container">
-          <div *ngFor="let format of audioFormats; let i = index" 
+          <div *ngFor="let format of audioFormats; let i = index; trackBy: trackByFormatQuality" 
                class="format-card"
                [style.animation-delay]="i * 0.1 + 's'">
             <div class="card-glow"></div>
@@ -479,14 +479,14 @@
 
     <!-- History List -->
     <div *ngIf="!historyLoading && downloadHistory.length > 0" class="history-list">
-      <div *ngFor="let item of downloadHistory; let i = index" 
+      <div *ngFor="let item of downloadHistory; let i = index; trackBy: trackByHistoryId" 
            class="history-item"
            [style.animation-delay]="i * 0.05 + 's'">
         <div class="history-card">
           <div class="card-glow"></div>
           
           <div class="history-thumbnail">
-            <img [src]="item.thumbnail" [alt]="item.title">
+            <img [src]="item.thumbnail" [alt]="item.title" loading="lazy">
             <div class="thumbnail-overlay">
               <span class="format-badge">{{ item.format.toUpperCase() }}</span>
               <span class="quality-badge">{{ item.quality }}</span>
