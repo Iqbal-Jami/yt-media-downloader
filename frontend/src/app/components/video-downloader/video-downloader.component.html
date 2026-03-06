@@ -197,14 +197,43 @@
               {{ format.quality }} • {{ format.format.toUpperCase() }}
             </div>
             <div class="format-size">EST: {{ format.size }}</div>
+            
+            <!-- Download Progress Section -->
+            <div *ngIf="isDownloading(format)" class="download-progress-container">
+              <div class="progress-info">
+                <span class="progress-status">{{ getDownloadStatus(format) }}</span>
+                <span class="progress-percentage">{{ getDownloadProgress(format).toFixed(0) }}%</span>
+              </div>
+              <div class="progress-bar-wrapper">
+                <div class="progress-bar-track">
+                  <div class="progress-bar-fill" 
+                       [style.width.%]="getDownloadProgress(format)"
+                       [class.pulse-animation]="getDownloadProgress(format) < 100">
+                    <div class="progress-bar-shine"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="progress-stats">
+                <span class="stat-item">
+                  <span class="stat-icon">⚡</span>
+                  <span class="stat-value">{{ getDownloadSpeed(format) }}</span>
+                </span>
+                <span class="stat-item">
+                  <span class="stat-icon">⏱</span>
+                  <span class="stat-value">{{ getDownloadETA(format) }}</span>
+                </span>
+              </div>
+            </div>
+            
             <button 
               (click)="downloadVideo(format)"
               [disabled]="isDownloading(format)"
               class="extract-btn"
+              [class.downloading]="isDownloading(format)"
             >
               <span class="btn-icon">{{ isDownloading(format) ? '⟳' : '⬇' }}</span>
               <span class="btn-text">
-                {{ isDownloading(format) ? 'PROCESSING ' + getDownloadProgress(format).toFixed(0) + '%' : 'EXTRACT' }}
+                {{ isDownloading(format) ? 'DOWNLOADING...' : 'EXTRACT' }}
               </span>
             </button>
           </div>
@@ -224,14 +253,43 @@
               {{ format.quality }} • {{ format.format.toUpperCase() }}
             </div>
             <div class="format-size">EST: {{ format.size }}</div>
+            
+            <!-- Download Progress Section -->
+            <div *ngIf="isDownloading(format)" class="download-progress-container">
+              <div class="progress-info">
+                <span class="progress-status">{{ getDownloadStatus(format) }}</span>
+                <span class="progress-percentage">{{ getDownloadProgress(format).toFixed(0) }}%</span>
+              </div>
+              <div class="progress-bar-wrapper">
+                <div class="progress-bar-track">
+                  <div class="progress-bar-fill" 
+                       [style.width.%]="getDownloadProgress(format)"
+                       [class.pulse-animation]="getDownloadProgress(format) < 100">
+                    <div class="progress-bar-shine"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="progress-stats">
+                <span class="stat-item">
+                  <span class="stat-icon">⚡</span>
+                  <span class="stat-value">{{ getDownloadSpeed(format) }}</span>
+                </span>
+                <span class="stat-item">
+                  <span class="stat-icon">⏱</span>
+                  <span class="stat-value">{{ getDownloadETA(format) }}</span>
+                </span>
+              </div>
+            </div>
+            
             <button 
               (click)="downloadVideo(format)"
               [disabled]="isDownloading(format)"
               class="extract-btn"
+              [class.downloading]="isDownloading(format)"
             >
               <span class="btn-icon">{{ isDownloading(format) ? '⟳' : '⬇' }}</span>
               <span class="btn-text">
-                {{ isDownloading(format) ? 'PROCESSING ' + getDownloadProgress(format).toFixed(0) + '%' : 'EXTRACT' }}
+                {{ isDownloading(format) ? 'DOWNLOADING...' : 'EXTRACT' }}
               </span>
             </button>
           </div>
@@ -272,6 +330,25 @@
     </div>
 
     <!-- Playlist Progress (if downloading) -->
+    <!-- Initializing state -->
+    <div *ngIf="playlistDownloading && !playlistProgress" class="playlist-progress-panel initializing">
+      <div class="progress-header">
+        <h4>⚡ Initializing Download Protocol...</h4>
+        <div class="loading-dots">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+      </div>
+      <div class="progress-bar-container">
+        <div class="progress-bar-fill loading-animation"></div>
+      </div>
+      <div class="progress-info">
+        <span>Establishing connection to media server...</span>
+      </div>
+    </div>
+
+    <!-- Active downloading state -->
     <div *ngIf="playlistDownloading && playlistProgress" class="playlist-progress-panel">
       <div class="progress-header">
         <h4>Downloading Playlist...</h4>
@@ -392,11 +469,13 @@
             </div>
             <button 
               (click)="downloadPlaylist(format)"
-              [disabled]="selectedPlaylistVideos.size === 0"
+              [disabled]="selectedPlaylistVideos.size === 0 || playlistDownloading"
               class="extract-btn"
+              [class.downloading]="playlistDownloading"
             >
-              <span class="btn-icon">⬇</span>
-              <span class="btn-text">EXTRACT PLAYLIST</span>
+              <span class="btn-icon" *ngIf="!playlistDownloading">⬇</span>
+              <span class="btn-icon spinner" *ngIf="playlistDownloading">⟳</span>
+              <span class="btn-text">{{ playlistDownloading ? 'INITIATING...' : 'EXTRACT PLAYLIST' }}</span>
             </button>
           </div>
         </div>
@@ -419,11 +498,13 @@
             </div>
             <button 
               (click)="downloadPlaylist(format)"
-              [disabled]="selectedPlaylistVideos.size === 0"
+              [disabled]="selectedPlaylistVideos.size === 0 || playlistDownloading"
               class="extract-btn"
+              [class.downloading]="playlistDownloading"
             >
-              <span class="btn-icon">⬇</span>
-              <span class="btn-text">EXTRACT PLAYLIST</span>
+              <span class="btn-icon" *ngIf="!playlistDownloading">⬇</span>
+              <span class="btn-icon spinner" *ngIf="playlistDownloading">⟳</span>
+              <span class="btn-text">{{ playlistDownloading ? 'INITIATING...' : 'EXTRACT PLAYLIST' }}</span>
             </button>
           </div>
         </div>

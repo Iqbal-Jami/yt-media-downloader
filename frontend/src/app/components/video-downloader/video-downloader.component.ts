@@ -54,6 +54,9 @@ export class VideoDownloaderComponent implements AfterViewInit {
 
   downloadingFormats = new Set<string>();
   downloadProgress = new Map<string, number>();
+  downloadStatus = new Map<string, string>();
+  downloadSpeed = new Map<string, string>();
+  downloadETA = new Map<string, string>();
 
   constructor(
     private youtubeService: YoutubeService,
@@ -306,6 +309,9 @@ export class VideoDownloaderComponent implements AfterViewInit {
 
     this.playlistDownloading = true;
     this.playlistProgress = null;
+    
+    // Immediately update the UI to show initializing state
+    this.cdr.detectChanges();
 
     const selectedIds = Array.from(this.selectedPlaylistVideos);
 
@@ -377,6 +383,16 @@ export class VideoDownloaderComponent implements AfterViewInit {
     const downloadKey = `${format.quality}-${format.format}`;
     this.downloadingFormats.add(downloadKey);
     this.downloadProgress.set(downloadKey, 0);
+    this.downloadStatus.set(downloadKey, 'Initializing...');
+    this.downloadSpeed.set(downloadKey, '---');
+    this.downloadETA.set(downloadKey, 'Calculating...');
+    
+    // Immediately update the UI to show downloading state
+    this.cdr.detectChanges();
+    
+    const startTime = Date.now();
+    let lastProgress = 0;
+    let lastUpdateTime = startTime;
 
     // Start progress simulation as fallback
     const progressInterval = setInterval(() => {
@@ -384,7 +400,40 @@ export class VideoDownloaderComponent implements AfterViewInit {
       if (currentProgress < 90 && this.downloadingFormats.has(downloadKey)) {
         // Slow incremental progress as fallback
         setTimeout(() => {
-          this.downloadProgress.set(downloadKey, Math.min(currentProgress + Math.random() * 5, 90));
+          const newProgress = Math.min(currentProgress + Math.random() * 5, 90);
+          this.downloadProgress.set(downloadKey, newProgress);
+          
+          // Update status based on progress
+          if (newProgress < 10) {
+            this.downloadStatus.set(downloadKey, 'Connecting to server...');
+          } else if (newProgress < 30) {
+            this.downloadStatus.set(downloadKey, 'Fetching video data...');
+          } else if (newProgress < 70) {
+            this.downloadStatus.set(downloadKey, 'Downloading media...');
+          } else if (newProgress < 90) {
+            this.downloadStatus.set(downloadKey, 'Processing file...');
+          }
+          
+          // Calculate speed and ETA
+          const elapsed = (Date.now() - startTime) / 1000; // seconds
+          const progressDiff = newProgress - lastProgress;
+          if (progressDiff > 0 && elapsed > 0) {
+            const speed = (progressDiff / elapsed).toFixed(1);
+            this.downloadSpeed.set(downloadKey, `${speed}% /s`);
+            
+            const remaining = 100 - newProgress;
+            const eta = Math.ceil(remaining / parseFloat(speed));
+            if (eta < 60) {
+              this.downloadETA.set(downloadKey, `${eta}s`);
+            } else {
+              const minutes = Math.floor(eta / 60);
+              const seconds = eta % 60;
+              this.downloadETA.set(downloadKey, `${minutes}m ${seconds}s`);
+            }
+          }
+          
+          lastProgress = newProgress;
+          lastUpdateTime = Date.now();
           this.cdr.markForCheck();
         });
       }
@@ -400,6 +449,42 @@ export class VideoDownloaderComponent implements AfterViewInit {
         // Real progress from server overrides simulated progress
         setTimeout(() => {
           this.downloadProgress.set(downloadKey, progress);
+          
+          // Update status based on progress
+          if (progress < 10) {
+            this.downloadStatus.set(downloadKey, 'Initializing download...');
+          } else if (progress < 50) {
+            this.downloadStatus.set(downloadKey, 'Downloading...');
+          } else if (progress < 90) {
+            this.downloadStatus.set(downloadKey, format.format === 'mp3' ? 'Converting to MP3...' : 'Merging streams...');
+          } else if (progress < 100) {
+            this.downloadStatus.set(downloadKey, 'Finalizing...');
+          } else {
+            this.downloadStatus.set(downloadKey, 'Complete!');
+          }
+          
+          // Calculate real speed and ETA
+          const elapsed = (Date.now() - lastUpdateTime) / 1000;
+          const progressDiff = progress - lastProgress;
+          if (progressDiff > 0 && elapsed > 0) {
+            const speed = (progressDiff / elapsed).toFixed(1);
+            this.downloadSpeed.set(downloadKey, `${speed}% /s`);
+            
+            const remaining = 100 - progress;
+            const eta = Math.ceil(remaining / parseFloat(speed));
+            if (eta < 60) {
+              this.downloadETA.set(downloadKey, `${eta}s`);
+            } else if (eta < 3600) {
+              const minutes = Math.floor(eta / 60);
+              const seconds = eta % 60;
+              this.downloadETA.set(downloadKey, `${minutes}m ${seconds}s`);
+            } else {
+              this.downloadETA.set(downloadKey, '> 1h');
+            }
+          }
+          
+          lastProgress = progress;
+          lastUpdateTime = Date.now();
           this.cdr.markForCheck();
         });
       },
@@ -419,6 +504,9 @@ export class VideoDownloaderComponent implements AfterViewInit {
         progressSub.unsubscribe();
         this.downloadingFormats.delete(downloadKey);
         this.downloadProgress.delete(downloadKey);
+        this.downloadStatus.delete(downloadKey);
+        this.downloadSpeed.delete(downloadKey);
+        this.downloadETA.delete(downloadKey);
         this.cdr.detectChanges();
         
         if (response.success && response.downloadUrl) {
@@ -441,6 +529,9 @@ export class VideoDownloaderComponent implements AfterViewInit {
         progressSub.unsubscribe();
         this.downloadingFormats.delete(downloadKey);
         this.downloadProgress.delete(downloadKey);
+        this.downloadStatus.delete(downloadKey);
+        this.downloadSpeed.delete(downloadKey);
+        this.downloadETA.delete(downloadKey);
         this.showError(error.error?.error || 'Download failed. Make sure the backend server is running.');
         this.cdr.detectChanges();
       }
@@ -455,6 +546,21 @@ export class VideoDownloaderComponent implements AfterViewInit {
   getDownloadProgress(format: VideoFormat): number {
     const downloadKey = `${format.quality}-${format.format}`;
     return this.downloadProgress.get(downloadKey) || 0;
+  }
+
+  getDownloadStatus(format: VideoFormat): string {
+    const downloadKey = `${format.quality}-${format.format}`;
+    return this.downloadStatus.get(downloadKey) || '';
+  }
+
+  getDownloadSpeed(format: VideoFormat): string {
+    const downloadKey = `${format.quality}-${format.format}`;
+    return this.downloadSpeed.get(downloadKey) || '';
+  }
+
+  getDownloadETA(format: VideoFormat): string {
+    const downloadKey = `${format.quality}-${format.format}`;
+    return this.downloadETA.get(downloadKey) || '';
   }
 
   setActiveTab(tab: 'video' | 'audio') {

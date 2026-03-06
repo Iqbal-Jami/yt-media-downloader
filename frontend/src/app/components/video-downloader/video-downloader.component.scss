@@ -1011,6 +1011,9 @@
   border-radius: 12px;
   transition: all 0.3s;
   animation: cardSlideIn 0.5s ease-out backwards;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
   
   &::before {
     content: '';
@@ -1114,6 +1117,180 @@
   margin-bottom: 20px;
 }
 
+// ======================================
+// DOWNLOAD PROGRESS SECTION
+// ======================================
+.download-progress-container {
+  margin: 20px 0;
+  padding: 15px;
+  background: rgba(0, 243, 255, 0.05);
+  border: 1px solid rgba(0, 243, 255, 0.2);
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 255, 136, 0.1), transparent);
+    animation: scanProgress 2s linear infinite;
+  }
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-family: 'Rajdhani', sans-serif;
+  position: relative;
+  z-index: 1;
+}
+
+.progress-status {
+  font-size: 0.9em;
+  color: var(--neon-cyan);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  animation: textPulse 2s ease-in-out infinite;
+}
+
+.progress-percentage {
+  font-size: 1.1em;
+  color: var(--neon-green);
+  font-weight: 700;
+  font-family: 'Share Tech Mono', monospace;
+  text-shadow: 0 0 10px var(--neon-green);
+}
+
+.progress-bar-wrapper {
+  margin: 12px 0;
+  position: relative;
+  z-index: 1;
+}
+
+.progress-bar-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(0, 243, 255, 0.1);
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, 
+    var(--neon-cyan), 
+    var(--neon-green), 
+    var(--neon-cyan)
+  );
+  background-size: 200% 100%;
+  border-radius: 10px;
+  transition: width 0.5s ease-out;
+  position: relative;
+  box-shadow: 0 0 15px var(--neon-green), 
+              inset 0 0 10px rgba(255, 255, 255, 0.2);
+  animation: gradientShift 3s ease-in-out infinite;
+  
+  &.pulse-animation {
+    animation: gradientShift 3s ease-in-out infinite, 
+               barPulse 1.5s ease-in-out infinite;
+  }
+}
+
+.progress-bar-shine {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.4), 
+    transparent
+  );
+  animation: shine 2s ease-in-out infinite;
+}
+
+.progress-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  font-family: 'Share Tech Mono', monospace;
+  position: relative;
+  z-index: 1;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.85em;
+  color: rgba(0, 243, 255, 0.8);
+  padding: 5px 10px;
+  background: rgba(0, 243, 255, 0.05);
+  border-radius: 5px;
+  border: 1px solid rgba(0, 243, 255, 0.2);
+}
+
+.stat-icon {
+  font-size: 1.1em;
+  filter: drop-shadow(0 0 3px currentColor);
+}
+
+.stat-value {
+  font-weight: 600;
+  color: var(--neon-green);
+}
+
+// Progress Animations
+@keyframes scanProgress {
+  0% { left: -100%; }
+  100% { left: 200%; }
+}
+
+@keyframes textPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes barPulse {
+  0%, 100% { 
+    box-shadow: 0 0 15px var(--neon-green), 
+                inset 0 0 10px rgba(255, 255, 255, 0.2);
+  }
+  50% { 
+    box-shadow: 0 0 25px var(--neon-green), 
+                0 0 35px var(--neon-cyan),
+                inset 0 0 15px rgba(255, 255, 255, 0.3);
+  }
+}
+
+@keyframes shine {
+  0% { left: -100%; }
+  100% { left: 200%; }
+}
+
+// ======================================
+// EXTRACT BUTTON
+// ======================================
 .extract-btn {
   width: 100%;
   padding: 12px 20px;
@@ -1133,6 +1310,7 @@
   gap: 10px;
   position: relative;
   overflow: hidden;
+  margin-top: auto;
   
   &::before {
     content: '';
@@ -1163,7 +1341,7 @@
   }
   
   &:disabled {
-    opacity: 0.5;
+    opacity: 0.6;
     cursor: not-allowed;
     border-color: rgba(0, 243, 255, 0.3);
     color: rgba(0, 243, 255, 0.5);
@@ -1172,6 +1350,27 @@
       animation: spin 1s linear infinite;
     }
   }
+  
+  &.downloading {
+    background: linear-gradient(135deg, rgba(0, 243, 255, 0.3), rgba(0, 255, 136, 0.3));
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+    animation: buttonGlow 2s ease-in-out infinite;
+    
+    .btn-icon {
+      animation: spin 2s linear infinite;
+      filter: drop-shadow(0 0 8px var(--neon-cyan));
+    }
+  }
+}
+
+@keyframes buttonGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(0, 243, 255, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(0, 243, 255, 0.8), 0 0 35px rgba(0, 255, 136, 0.5);
+  }
 }
 
 .btn-icon {
@@ -1179,7 +1378,17 @@
   filter: drop-shadow(0 0 5px currentColor);
   position: relative;
   z-index: 1;
+
+  &.spinner {
+    animation: spin 1s linear infinite;
+  }
 }
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
 
 .btn-text {
   position: relative;
@@ -1644,6 +1853,33 @@
       color: var(--text-light);
       font-weight: 600;
     }
+
+    .loading-dots {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+
+      .dot {
+        width: 8px;
+        height: 8px;
+        background: var(--neon-blue);
+        border-radius: 50%;
+        animation: dotPulse 1.4s infinite ease-in-out;
+        box-shadow: 0 0 10px var(--neon-blue);
+
+        &:nth-child(1) {
+          animation-delay: 0s;
+        }
+
+        &:nth-child(2) {
+          animation-delay: 0.2s;
+        }
+
+        &:nth-child(3) {
+          animation-delay: 0.4s;
+        }
+      }
+    }
   }
 
   .progress-bar-container {
@@ -1660,6 +1896,17 @@
       background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
       transition: width 0.3s ease;
       box-shadow: 0 0 20px rgba(0, 243, 255, 0.5);
+
+      &.loading-animation {
+        width: 100% !important;
+        background: linear-gradient(90deg, 
+          transparent 0%, 
+          var(--neon-blue) 50%, 
+          transparent 100%
+        );
+        background-size: 200% 100%;
+        animation: loadingShimmer 1.5s infinite;
+      }
     }
   }
 
@@ -1668,6 +1915,31 @@
     justify-content: space-between;
     color: var(--text-light);
     font-size: 0.9rem;
+  }
+
+  &.initializing {
+    border-color: var(--neon-purple);
+    box-shadow: 0 0 20px rgba(147, 51, 234, 0.3);
+  }
+}
+
+@keyframes dotPulse {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes loadingShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
   }
 }
 
