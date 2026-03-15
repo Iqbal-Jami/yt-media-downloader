@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: youtube-downloader-backend
+    env: node
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o yt-dlp && chmod +x yt-dlp
+    startCommand: node dist/main
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: CORS_ORIGIN
+        sync: false
+      - key: DOWNLOAD_PATH
+        value: ./downloads
+      - key: MAX_FILE_SIZE
+        value: 500000000
+      - key: CLEANUP_INTERVAL
+        value: 3600000
+      - key: RATE_LIMIT_TTL
+        value: 60
+      - key: RATE_LIMIT_MAX
+        value: 10

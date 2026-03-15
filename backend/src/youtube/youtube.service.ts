@@ -16,6 +16,10 @@ export class YoutubeService extends EventEmitter {
   private readonly historyFile = path.join(process.cwd(), 'download-history.json');
   // Agent removed - it was blocking server startup
   // private agent: ytdl.Agent;
+  private get ytdlpBin(): string {
+    const bin = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
+    return path.join(process.cwd(), bin);
+  }
 
   constructor() {
     super();
@@ -84,22 +88,23 @@ export class YoutubeService extends EventEmitter {
   // Fallback method using yt-dlp to get video info
   private async getVideoInfoViaYtDlp(url: string): Promise<VideoInfo> {
     return new Promise((resolve, reject) => {
-      const ytdlpPath = path.join(process.cwd(), 'yt-dlp.exe');
+      const ytdlpPath = this.ytdlpBin;
       
       if (!fs.existsSync(ytdlpPath)) {
-        reject(new Error('yt-dlp.exe not found. Please download it to the backend directory.'));
+        reject(new Error('yt-dlp not found. Please install yt-dlp on the server.'));
         return;
       }
 
-      // Try with browser cookies first (Chrome), fallback to no cookies
+      // Use Android client to bypass bot detection (works on servers without browser)
       const args = [
-        '--dump-json', 
+        '--dump-json',
         '--no-playlist',
-        '--cookies-from-browser', 'chrome', // Extract cookies from Chrome
+        '--extractor-args', 'youtube:player_client=android',
+        '--user-agent', 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
         url
       ];
       
-      this.logger.log(`Executing yt-dlp with browser cookies...`);
+      this.logger.log(`Executing yt-dlp for video info...`);
       const child = spawn(ytdlpPath, args, { shell: false });
 
       let jsonOutput = '';
@@ -132,8 +137,8 @@ export class YoutubeService extends EventEmitter {
             reject(new Error(`Failed to parse yt-dlp output: ${parseError.message}`));
           }
         } else {
-          // If Chrome cookies fail, try without cookies as last resort
-          this.logger.warn(`yt-dlp with cookies failed, trying without cookies...`);
+          // If android client fails, try plain fallback
+          this.logger.warn(`yt-dlp android client failed, trying plain fallback...`);
           this.getVideoInfoViaYtDlpNoCookies(url).then(resolve).catch(reject);
         }
       });
@@ -147,7 +152,7 @@ export class YoutubeService extends EventEmitter {
   // Last resort: yt-dlp without cookies (likely to fail on some videos)
   private async getVideoInfoViaYtDlpNoCookies(url: string): Promise<VideoInfo> {
     return new Promise((resolve, reject) => {
-      const ytdlpPath = path.join(process.cwd(), 'yt-dlp.exe');
+      const ytdlpPath = this.ytdlpBin;
       const args = ['--dump-json', '--no-playlist', url];
       
       const child = spawn(ytdlpPath, args, { shell: false });
@@ -195,11 +200,11 @@ export class YoutubeService extends EventEmitter {
   // Helper method to execute yt-dlp with proper path handling for spaces
   private async executeYtdlp(url: string, args: string[], downloadKey?: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      // Use yt-dlp.exe from project root
-      const ytdlpPath = path.join(process.cwd(), 'yt-dlp.exe');
+      // Use yt-dlp from project root (platform-aware)
+      const ytdlpPath = this.ytdlpBin;
 
       if (!fs.existsSync(ytdlpPath)) {
-        reject(new Error('yt-dlp.exe not found in project root'));
+        reject(new Error('yt-dlp not found in project root'));
         return;
       }
 
@@ -432,7 +437,7 @@ export class YoutubeService extends EventEmitter {
       }
       
       if (!downloadSuccess) {
-        throw new Error(`Download failed after multiple attempts. Last error: ${lastError?.message || 'Unknown error'}. Please try: 1) Update yt-dlp.exe to latest version, 2) Make sure you have Chrome browser installed, 3) Try a different video quality.`);
+        throw new Error(`Download failed after multiple attempts. Last error: ${lastError?.message || 'Unknown error'}. Please try: 1) Update yt-dlp to latest version, 2) Try a different video quality.`);
       }
       
       this.logger.log(`Download completed successfully`);
@@ -616,8 +621,8 @@ export class YoutubeService extends EventEmitter {
       
       const url = `https://www.youtube.com/playlist?list=${playlistId}`;
       
-      // Use full path to yt-dlp.exe
-      const ytdlpPath = path.join(process.cwd(), 'yt-dlp.exe');
+      // Use platform-aware yt-dlp path
+      const ytdlpPath = this.ytdlpBin;
       
       return new Promise<PlaylistInfo>((resolve, reject) => {
         const ytdlp = spawn(ytdlpPath, [

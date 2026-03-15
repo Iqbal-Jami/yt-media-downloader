@@ -16,9 +16,27 @@ async function bootstrap() {
     
     process.stdout.write('3. NestFactory created successfully!\n');
 
-    // Enable CORS
+    // Enable CORS with support for multiple comma-separated origins
+    const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:4200')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+
     app.enableCors({
-      origin: process.env.CORS_ORIGIN || 'http://localhost:4200',
+      origin: (origin, callback) => {
+        // Allow non-browser requests (curl/Postman) and same-origin requests
+        if (!origin) {
+          callback(null, true);
+          return;
+        }
+
+        if (corsOrigins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+
+        callback(new Error(`CORS blocked for origin: ${origin}`), false);
+      },
       credentials: true,
     });
 
