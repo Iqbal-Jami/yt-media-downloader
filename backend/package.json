@@ -7,6 +7,7 @@
   "license": "MIT",
   "scripts": {
     "build": "nest build",
+    "postinstall": "node scripts/download-ytdlp.js",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -31,7 +32,8 @@
     "rxjs": "^7.8.1",
     "undici": "^6.6.0",
     "uuid": "^9.0.1",
-    "youtube-dl-exec": "^3.1.1"
+    "youtube-dl-exec": "^3.1.1",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.3.0",
