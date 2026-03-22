@@ -1,0 +1,6 @@
+{
+  "buildCommand": "ng build --configuration production",
+  "outputDirectory": "dist/youtube-downloader",
+  "framework": "angular",
+  "nodeVersion": "20.x"
+}
