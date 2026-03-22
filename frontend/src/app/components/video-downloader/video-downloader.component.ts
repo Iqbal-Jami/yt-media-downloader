@@ -354,7 +354,7 @@ export class VideoDownloaderComponent implements AfterViewInit {
               // Trigger download with delay to avoid browser blocking multiple downloads
               setTimeout(() => {
                 const link = document.createElement('a');
-                link.href = `http://localhost:3000${downloadUrl}`;
+                link.href = `${this.youtubeService.getApiUrl()}${downloadUrl}`;
                 link.download = filename;
                 document.body.appendChild(link);
                 link.click();
@@ -512,7 +512,7 @@ export class VideoDownloaderComponent implements AfterViewInit {
         if (response.success && response.downloadUrl) {
           // Trigger download
           const link = document.createElement('a');
-          link.href = `http://localhost:3000${response.downloadUrl}`;
+          link.href = `${this.youtubeService.getApiUrl()}${response.downloadUrl}`;
           link.download = response.filename || `video.${format.ext}`;
           
           // Reload history to show the new download

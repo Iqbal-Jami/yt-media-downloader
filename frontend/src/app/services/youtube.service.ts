@@ -24,6 +24,10 @@ export class YoutubeService {
 
   constructor(private http: HttpClient) { }
 
+  getApiUrl(): string {
+    return this.apiUrl;
+  }
+
   getVideoInfo(videoId: string): Observable<ApiResponse<VideoInfo>> {
     // Check cache first for instant response
     if (!this.videoInfoCache.has(videoId)) {
