@@ -1,34 +1,51 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
 
 const YTDLP_URL = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
 const YTDLP_PATH = path.join(__dirname, '..', 'yt-dlp');
 
-console.log('📥 Downloading yt-dlp binary...');
+console.log('📥 Checking yt-dlp availability...');
 
 if (process.platform === 'win32') {
-  // On Windows, use the .exe version
-  console.log('⏭️  Skipping yt-dlp download on Windows. Will use youtube-dl-exec package.');
+  console.log('⏭️  Windows detected. Skipping yt-dlp binary download.');
   process.exit(0);
 }
 
-function downloadFile(url, destPath) {
+// Check if file already exists
+if (fs.existsSync(YTDLP_PATH)) {
+  console.log('✅ yt-dlp already exists!');
+  process.exit(0);
+}
+
+console.log('📥 Downloading yt-dlp binary...');
+console.log(`URL: ${YTDLP_URL}`);
+
+// Set timeout for the whole download
+const downloadTimeout = setTimeout(() => {
+  console.warn('⚠️ Download timeout after 5 minutes. Moving forward without yt-dlp.');
+  process.exit(0);
+}, 5 * 60 * 1000);
+
+function downloadFile(url, destPath, redirectCount = 0) {
+  if (redirectCount > 10) {
+    throw new Error('Too many redirects');
+  }
+
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(destPath);
     
-    https.get(url, { 
+    const request = https.get(url, { 
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'
       },
-      followRedirects: true,
-      maxRedirects: 5
+      timeout: 30000
     }, (response) => {
       // Handle redirects
       if (response.statusCode === 302 || response.statusCode === 301) {
         file.destroy();
-        downloadFile(response.headers.location, destPath)
+        fs.unlink(destPath, () => {});
+        downloadFile(response.headers.location, destPath, redirectCount + 1)
           .then(resolve)
           .catch(reject);
         return;
@@ -43,29 +60,45 @@ function downloadFile(url, destPath) {
       response.pipe(file);
 
       file.on('finish', () => {
-        file.close();
-        // Make executable
-        fs.chmod(destPath, 0o755, (err) => {
-          if (err) reject(err);
-          else resolve();
+        file.close((err) => {
+          if (err) {
+            reject(err);
+          } else {
+            // Make executable
+            fs.chmod(destPath, 0o755, (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          }
         });
       });
-    }).on('error', (err) => {
-      fs.unlink(destPath, () => {}); // Delete file on error
+    });
+
+    request.on('error', (err) => {
+      file.destroy();
+      fs.unlink(destPath, () => {});
       reject(err);
+    });
+
+    request.on('timeout', () => {
+      request.destroy();
+      file.destroy();
+      fs.unlink(destPath, () => {});
+      reject(new Error('Request timeout'));
     });
   });
 }
 
 downloadFile(YTDLP_URL, YTDLP_PATH)
   .then(() => {
+    clearTimeout(downloadTimeout);
     console.log('✅ yt-dlp downloaded successfully!');
     process.exit(0);
   })
   .catch((err) => {
-    console.warn('⚠️  Warning: Could not download yt-dlp binary.');
+    clearTimeout(downloadTimeout);
+    console.warn('⚠️  Could not download yt-dlp binary.');
     console.warn('Error:', err.message);
-    console.warn('The application will attempt to use youtube-dl-exec from node_modules.');
-    // Don't fail the entire build process
+    console.warn('ℹ️ The application will use youtube-dl-exec from node_modules.');
     process.exit(0);
   });
